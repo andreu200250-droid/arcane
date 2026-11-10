@@ -1,0 +1,19 @@
+# Blueprint для one-click деплоя на Render (https://render.com/docs/blueprint-spec)
+# Render → New → Blueprint → выбрать этот репозиторий.
+services:
+  - type: web
+    name: dota-gem-monitor
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter          # free-план засыпает через 15 минут простоя — мониторинг встанет
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: SCAN_INTERVAL
+        value: "900"
+      - key: DB_PATH
+        value: /data/monitor.db
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1

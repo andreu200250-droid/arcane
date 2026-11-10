@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dota 2 · Монитор арканы с самоцветом</title>
+<style>
+  *{box-sizing:border-box}
+  :root{
+    --bg:#0b0e13; --panel:#141922; --panel2:#182030; --line:#232c3a;
+    --txt:#e7ebf2; --mut:#8794a8; --acc:#4fd18b; --acc2:#6cb6ff;
+  }
+  body{margin:0;background:radial-gradient(1200px 600px at 20% -10%,#16202c 0,#0b0e13 60%);
+       color:var(--txt);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:22px 18px 70px}
+  header{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:6px}
+  h1{font-size:21px;margin:0;letter-spacing:-.02em}
+  h1 span{color:var(--mut);font-weight:400;font-size:13px;display:block;letter-spacing:0}
+  .grow{flex:1}
+  .pill{background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:12.5px;color:var(--mut);white-space:nowrap}
+  .pill b{color:var(--txt);font-weight:600}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--acc);display:inline-block;margin-right:6px;vertical-align:1px}
+  .dot.busy{background:#d8a13a;animation:p 1s infinite}
+  .dot.err{background:#e0554d}
+  @keyframes p{50%{opacity:.3}}
+  button{font:inherit;font-size:13px;font-weight:600;cursor:pointer;border-radius:9px;border:1px solid var(--line);
+         background:var(--panel2);color:var(--txt);padding:8px 14px;transition:.15s}
+  button:hover{background:#20293a;border-color:#31405a}
+  button.primary{background:#1f6feb;border-color:#1f6feb;color:#fff}
+  button.primary:hover{background:#2b7ff5}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:18px 0 8px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:16px 18px;position:relative;overflow:hidden}
+  .card:before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:var(--acc)}
+  .card.c2:before{background:var(--acc2)} .card.c3:before{background:#a97ede}
+  .card .tag{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);font-weight:700}
+  .card .big{font-size:25px;font-weight:800;letter-spacing:-.02em;margin:6px 0 2px}
+  .card .gem{font-size:13.5px;color:var(--txt);font-weight:600}
+  .card .small{font-size:12px;color:var(--mut);margin-top:8px;line-height:1.45}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:20px 0 12px}
+  select,input{font:inherit;font-size:13px;background:var(--panel);border:1px solid var(--line);color:var(--txt);
+       border-radius:9px;padding:8px 10px;outline:none}
+  input::placeholder{color:#5f6b7d}
+  input[type=number]{width:118px}
+  select:focus,input:focus{border-color:#38507a}
+  label.chk{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--mut);cursor:pointer;
+       background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:8px 11px}
+  label.chk input{width:auto;accent-color:#1f6feb}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--panel);border-radius:13px;overflow:hidden}
+  thead th{position:sticky;top:0;background:#182030;text-align:left;font-size:10.5px;text-transform:uppercase;
+       letter-spacing:.06em;color:var(--mut);padding:11px 12px;border-bottom:1px solid var(--line);z-index:2}
+  td{padding:10px 12px;border-bottom:1px solid #1a2230;vertical-align:middle}
+  tbody tr:hover{background:#171f2b}
+  .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .pos{color:var(--acc);font-weight:700}
+  .neg{color:#7d8798}
+  .mut{color:var(--mut);font-size:11.5px;font-weight:400}
+  a{color:var(--acc2);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .gemcell{display:flex;align-items:center;gap:9px}
+  .sw{width:11px;height:11px;border-radius:3px;flex:0 0 auto;box-shadow:0 0 8px currentColor}
+  .badge{font-size:9.5px;font-weight:800;letter-spacing:.06em;padding:2px 6px;border-radius:5px;background:#2ea36b;color:#04140c;margin-left:7px;vertical-align:1px}
+  .badge.def{background:#39424f;color:#b9c3d1}
+  .empty{padding:30px;text-align:center;color:var(--mut)}
+  .h2{font-size:17px;margin:34px 0 10px;display:flex;align-items:center;gap:10px}
+  .h2 .mut{font-size:12px}
+  .split{display:grid;grid-template-columns:1.15fr .85fr;gap:16px;align-items:start}
+  .foot{margin-top:34px;color:var(--mut);font-size:12px;line-height:1.6;border-top:1px solid var(--line);padding-top:18px}
+  .banner{border-radius:11px;padding:11px 14px;font-size:12.5px;margin:10px 0;display:none}
+  .banner.err{display:block;background:#2a1614;border:1px solid #5d2a24;color:#f0b1a9}
+  .prog{height:3px;background:#1b2230;border-radius:3px;overflow:hidden;margin-top:10px;display:none}
+  .prog.on{display:block} .prog i{display:block;height:100%;width:35%;background:linear-gradient(90deg,#1f6feb,#4fd18b);animation:sl 1.1s infinite}
+  @keyframes sl{0%{transform:translateX(-100%)}100%{transform:translateX(300%)}}
+  @media(max-width:900px){.cards{grid-template-columns:1fr}.split{grid-template-columns:1fr}
+    .hide-sm{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Монитор арканы с самоцветом<span id="sub">Steam Community Market · Dota 2</span></h1>
+  <div class="grow"></div>
+  <div class="pill"><span id="statusDot" class="dot"></span><span id="statusTxt">загрузка…</span></div>
+  <div class="pill" id="ratePill">курс —</div>
+  <button id="btnCur">₽ / $</button>
+  <button id="btnCsv">CSV</button>
+  <button class="primary" id="btnScan">Обновить</button>
+</header>
+<div class="prog" id="prog"><i></i></div>
+<div class="banner" id="errBox"></div>
+
+<div class="cards" id="cards"></div>
+
+<div class="toolbar">
+  <select id="fHero">
+    <option value="">Все арканы</option>
+  </select>
+  <input id="fGem" placeholder="Поиск самоцвета…" style="width:190px">
+  <input id="fMax" type="number" placeholder="Цена до, ₽" title="Максимальная цена лота">
+  <input id="fMinSave" type="number" placeholder="Выгода от, %" title="Минимальная выгода в %" value="10">
+  <label class="chk"><input type="checkbox" id="fHideDef" checked> скрыть дефолтные гемы</label>
+  <label class="chk"><input type="checkbox" id="fNew"> только новые лоты</label>
+  <div class="grow"></div>
+  <select id="fSort">
+    <option value="save">сортировка: выгода ₽</option>
+    <option value="pct">выгода %</option>
+    <option value="price_asc">цена ↑</option>
+    <option value="price_desc">цена ↓</option>
+    <option value="gem">по гему</option>
+  </select>
+</div>
+
+<div class="h2">Лоты арканы с гемом <span class="mut" id="cnt"></span></div>
+<table>
+  <thead><tr>
+    <th>Лот</th><th>Самоцвет в сокете</th><th class="num">Гем отдельно</th>
+    <th class="num hide-sm">Аркана + гем</th><th class="num">Выгода</th><th class="num hide-sm">Сокетов</th>
+  </tr></thead>
+  <tbody id="rows"><tr><td colspan="6" class="empty">первый скан, подождите ~20–40 секунд…</td></tr></tbody>
+</table>
+
+<div class="split">
+  <div>
+    <div class="h2">Арканы с прайзматическим сокетом</div>
+    <table><tbody id="arcRows"></tbody></table>
+    <p class="foot" style="border:0;padding-top:10px;margin-top:8px">
+      Самоцвет ставится только в эти две арканы. В остальные — нет (там сокеты под stat/kinetic-гемы).
+      Ethereal-гемы в арканы не ставятся вообще.
+    </p>
+  </div>
+  <div>
+    <div class="h2">Прайзматики: цены <span class="mut" id="gemCnt"></span></div>
+    <div style="max-height:430px;overflow:auto;border:1px solid var(--line);border-radius:13px">
+      <table><thead><tr><th>Гем</th><th class="num">₽</th><th class="num">Δ</th></tr></thead>
+      <tbody id="gemRows"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<div class="foot">
+  <b>Как считается выгода.</b> «Аркана + гем» = самый дешёвый лот арканы на Steam сейчас + самый дешёвый лот этого
+  гема на Steam. Если готовый лот с уже вставленным гемом дешевле этой суммы — это выгода.
+  Δ — изменение цены гема с прошлого скана (история копится в monitor.db).
+  Лоты с пометкой <span class="badge def">дефолт</span> — штатная комплектация арканы, это не апгрейд:
+  у Terrorblade дефолт Prismatic: Reflection's Shade, у Techies — Prismatic: Explosive Burst.<br><br>
+  <b>Важно.</b> При замене гема старый уничтожается; вынуть дорогой гем обратно можно только Мастерским молотом,
+  который уничтожает аркану. Steam берёт 15% при продаже, так что это экономия на сборке, а не арбитраж.
+  Прямых ссылок на отдельный лот Steam не даёт — лоты открываются на общей странице предмета, состав сокета виден в карточке лота.
+  Данные парсятся с публичных страниц Steam раз в <span id="ivl">10</span> минут.
+</div>
+
+</div>
+<script>
+const $ = (s) => document.querySelector(s);
+let S = null, cur = "rub", timer = null, lastScan = 0;
+
+const fmt = (v, dec = 0) => {
+  if (v === null || v === undefined) return "—";
+  const s = Number(v).toLocaleString("ru-RU", {minimumFractionDigits: dec, maximumFractionDigits: dec});
+  return s.replace(/\u00a0/g, " ");
+};
+const money = (usd, dec) => cur === "rub" ? fmt(usd * (S ? S.rate : 82.57), dec === undefined ? 0 : dec) + " ₽"
+                                          : "$" + fmt(usd, dec === undefined ? 2 : dec);
+const COLORS = {
+  "Orange": "#ff8a3d", "Ember Flame": "#ff5a2e", "Diretide Orange": "#f08030",
+  "Light Green": "#a6e05a", "Earth Green": "#4a8f4a", "Deep Green": "#1f6b3a",
+  "Verdant Green": "#5fbf7a", "Bright Green": "#37e06a",
+  "Champion's Green": "#2fae6a", "Champion's Purple": "#9b5cff", "Champion's Blue": "#4a7cff",
+  "Bright Purple": "#b45cff", "Purple": "#8b3dd6", "Placid Blue": "#6d9fd6",
+  "Crystalline Blue": "#59c6e0", "Deep Blue": "#1f4fd6", "Blue": "#2d7dff",
+  "Sea Green": "#3fbfa8", "Ships in the Night": "#1d2b52", "Dungeon Doom": "#7a3f2a",
+  "Miasmatic Grey": "#6f7a6a", "Plague Grey": "#8a9a7a", "Cursed Black": "#20232a",
+  "Plushy Shag": "#c96fa8", "Rubiline": "#c02040", "Blossom Red": "#e0304f", "Red": "#c2263a",
+  "Gold": "#d4a338", "Midas Gold": "#e8b93c", "Summer Warmth": "#ffb347",
+  "Explosive Burst": "#ff6b1a", "Unhallowed Ground": "#4a4a6a", "Dredge Earth": "#6b5a3a",
+  "Brusque Britches Beige": "#c2a97a", "Tnim S'nnam": "#3fa0a0", "Glacial Flow": "#8ee6ff",
+  "Pyroclastic Flow": "#ff4a1a", "Creator's Light": "#fff2c2", "Reflection's Shade": "#ff3c28",
+  "Vermillion Renewal": "#e04a1a"
+};
+const col = (g) => COLORS[g] || "#6cb6ff";
+
+function esc(s){return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'&#39;":""}[c]||c));}
+const esc2 = (s) => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+
+function status(){
+  const dot = $("#statusDot"), txt = $("#statusTxt");
+  dot.className = "dot";
+  if (!S) return;
+  if (S.scanning){ dot.classList.add("busy"); txt.textContent = "сканирую Steam… " + (S.progress.pages||0) + " стр."; }
+  else if (S.error){ dot.classList.add("err"); txt.textContent = "ошибка скана"; }
+  else {
+    const ago = S.last_scan ? Math.round((S.now - S.last_scan)) : 0;
+    const left = Math.max(0, S.interval - (S.now - (S.last_scan||S.now)));
+    txt.innerHTML = "скан <b>" + ago + "с</b> назад · обновление через <b>" + Math.floor(left/60) + "м " + (left%60) + "с</b>";
+  }
+  $("#prog").classList.toggle("on", !!S.scanning);
+  $("#btnScan").disabled = !!S.scanning;
+  $("#ratePill").innerHTML = "курс <b>1$ = " + fmt(S.rate, 2) + " ₽</b>";
+  $("#ivl").textContent = Math.round(S.interval / 60);
+  const eb = $("#errBox");
+  if (S.error){ eb.className = "banner err"; eb.textContent = "Последний скан не удался (" + S.error + "). Показаны данные предыдущего успешного скана."; }
+  else eb.className = "banner";
+}
+
+function cards(){
+  const ds = S.deals.filter(d => !d.is_default);
+  if (!ds.length){ $("#cards").innerHTML = ""; return; }
+  const best = ds.reduce((a,b) => b.save_usd > a.save_usd ? b : a);
+  const pct = ds.reduce((a,b) => b.save_pct > a.save_pct ? b : a);
+  const cheap = ds.filter(d => d.save_pct >= 15).sort((a,b) => a.price_usd - b.price_usd)[0] || ds[ds.length-1];
+  const mk = (cls, tag, d) => `
+    <div class="card ${cls}">
+      <div class="tag">${tag}</div>
+      <div class="big">${money(d.price_usd)} <span class="mut">$${fmt(d.price_usd,2)}</span></div>
+      <div class="gem"><span class="sw" style="background:${col(d.gem)};color:${col(d.gem)}"></span>${esc2(d.gem)} · ${esc2(d.hero)}</div>
+      <div class="small">
+        гем отдельно ${money(d.gem_usd)} · собрать самому ${money(d.set_usd)}<br>
+        <span class="pos">выгода ${money(d.save_usd)} (${d.save_pct}%)</span>
+      </div>
+    </div>`;
+  $("#cards").innerHTML = mk("", "максимальная выгода в ₽", best) +
+    mk("c2", "лучший процент", pct) + mk("c3", "бюджетный вход · выгода ≥15%", cheap);
+}
+
+function filtered(){
+  let ds = S.deals.slice();
+  const h = $("#fHero").value, g = $("#fGem").value.trim().toLowerCase();
+  const mx = parseFloat($("#fMax").value), mn = parseFloat($("#fMinSave").value);
+  if (h) ds = ds.filter(d => d.hero_key === h);
+  if (g) ds = ds.filter(d => d.gem.toLowerCase().includes(g));
+  if (!isNaN(mx)) ds = ds.filter(d => d.price_usd * S.rate <= mx);
+  if (!isNaN(mn)) ds = ds.filter(d => d.save_pct >= mn);
+  if ($("#fHideDef").checked) ds = ds.filter(d => !d.is_default);
+  if ($("#fNew").checked) ds = ds.filter(d => d.is_new);
+  const s = $("#fSort").value;
+  if (s === "save") ds.sort((a,b) => b.save_usd - a.save_usd);
+  if (s === "pct") ds.sort((a,b) => b.save_pct - a.save_pct);
+  if (s === "price_asc") ds.sort((a,b) => a.price_usd - b.price_usd);
+  if (s === "price_desc") ds.sort((a,b) => b.price_usd - a.price_usd);
+  if (s === "gem") ds.sort((a,b) => a.gem.localeCompare(b.gem) || a.price_usd - b.price_usd);
+  return ds;
+}
+
+function table(){
+  const ds = filtered();
+  $("#cnt").textContent = "· показано " + ds.length + " из " + S.deals.length;
+  if (!S.deals.length){
+    $("#rows").innerHTML = '<tr><td colspan="6" class="empty">идёт первый скан Steam (~70 секунд) — таблица заполнится сама</td></tr>';
+    return;
+  }
+  if (!ds.length){
+    $("#rows").innerHTML = '<tr><td colspan="6" class="empty">под фильтры ничего не подходит — ослабьте условия</td></tr>';
+    return;
+  }
+  $("#rows").innerHTML = ds.slice(0, 200).map(d => {
+    const hot = d.save_pct >= 25 ? 'style="background:rgba(79,209,139,.06)"' : '';
+    const badge = d.is_new ? '<span class="badge">NEW</span>' :
+                 (d.is_default ? '<span class="badge def">дефолт</span>' : '');
+    return `<tr ${hot}>
+      <td><a href="${d.lot_url}" target="_blank"><b>${money(d.price_usd)}</b></a>
+          <div class="mut">$${fmt(d.price_usd,2)}${badge}</div></td>
+      <td><div class="gemcell"><span class="sw" style="background:${col(d.gem)};color:${col(d.gem)}"></span>
+          <div><a href="${d.gem_url}" target="_blank">${esc2(d.gem)}</a>
+          <div class="mut">${esc2(d.hero)} · гемов на рынке: ${d.gem_n}</div></div></div></td>
+      <td class="num">${money(d.gem_usd)}</td>
+      <td class="num mut hide-sm">${money(d.set_usd)}</td>
+      <td class="num ${d.save_usd >= 0 ? 'pos' : 'neg'}">${d.save_usd >= 0 ? '−' + money(d.save_usd) : '+' + money(-d.save_usd)}
+          <div class="mut">${d.save_pct}%</div></td>
+      <td class="num mut hide-sm">${d.sockets.length}</td>
+    </tr>`;
+  }).join("");
+}
+
+function side(){
+  $("#arcRows").innerHTML = S.arcanas.map(a => `
+    <tr><td><a href="${a.url}" target="_blank">${esc2(a.name)}</a>
+      <div class="mut">${esc2(a.hero)} · лотов: ${a.lots} · дефолтный гем: ${esc2(a.default_gem)}</div></td>
+      <td class="num">${S.base[a.key] ? "от <b>" + money(S.base[a.key]) + "</b>" : "<span class=mut>—</span>"}</td></tr>`).join("");
+  const ds = S.deltas || {};
+  $("#gemCnt").textContent = "· " + S.gems.length;
+  $("#gemRows").innerHTML = S.gems.map(g => {
+    const d = ds[g.name];
+    const dhtml = (d === undefined || d === null) ? '<span class="mut">—</span>'
+      : (Math.abs(d) < 0.01 ? '<span class="mut">0</span>'
+        : `<span class="${d > 0 ? 'pos' : 'neg'}">${d > 0 ? '▲' : '▼'}${money(Math.abs(d))}</span>`);
+    return `<tr><td><a href="${g.url}" target="_blank"><span class="sw" style="background:${col(g.name)};color:${col(g.name)};display:inline-block;margin-right:7px"></span>${esc2(g.name)}</a>
+      <div class="mut">лот. ${g.n}</div></td>
+      <td class="num">${money(g.usd)}</td><td class="num">${dhtml}</td></tr>`;
+  }).join("");
+}
+
+function render(){ if (!S) return; status(); cards(); table(); side(); }
+
+async function load(){
+  try{
+    const r = await fetch("/api/state", {cache: "no-store"});
+    S = await r.json();
+    if (!document.querySelector("#fHero option[value='tb']")){
+      S.arcanas.forEach(a => {
+        const o = document.createElement("option"); o.value = a.key; o.textContent = a.hero; $("#fHero").appendChild(o);
+      });
+    }
+    render();
+  }catch(e){ $("#statusTxt").textContent = "нет соединения с сервером"; }
+}
+
+async function scan(){
+  $("#btnScan").disabled = true;
+  try{
+    const r = await (await fetch("/api/scan", {cache:"no-store"})).json();
+    if (r.reason === "cooldown") $("#errBox") .className = "banner err",
+      $("#errBox").textContent = "Слишком часто: подождите ещё " + r.wait + " с (Steam банит за спам запросами).";
+  }catch(e){}
+  setTimeout(load, 600);
+}
+
+$("#btnScan").onclick = scan;
+$("#btnCsv").onclick = () => window.open("/api/export.csv", "_blank");
+$("#btnCur").onclick = () => { cur = cur === "rub" ? "usd" : "rub"; render(); };
+["fHero","fGem","fMax","fMinSave","fHideDef","fNew","fSort"].forEach(id => {
+  const el = $("#" + id);
+  el.addEventListener(id === "fGem" ? "input" : "change", render);
+});
+
+load();
+setInterval(load, 8000);   // опрос состояния раз в 8 с
+</script>
+</body>
+</html>

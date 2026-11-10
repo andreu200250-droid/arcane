@@ -1,0 +1,12 @@
+services:
+  monitor:
+    build: .
+    image: dota-gem-monitor:local
+    container_name: dota-gem-monitor
+    ports:
+      - "8000:8000"
+    environment:
+      SCAN_INTERVAL: "900"     # автоскан раз в 15 минут
+    volumes:
+      - ./data:/data           # история цен и лотов переживает перезапуск
+    restart: unless-stopped
