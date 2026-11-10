@@ -1,0 +1,311 @@
+
+# =============================================================================
+#  Dota 2 · монитор «аркана + самоцвет» — версия ОДНИМ ФАЙЛОМ
+#  Всё внутри: скан Steam Community Market, расчёт выгоды и генерация страницы.
+#  Кладите этот файл по пути:  .github/workflows/pages.yml
+#  Затем: Settings → Pages → Source = "GitHub Actions" (или шаг configure-pages
+#  включит сам) и Actions → Run workflow.
+# =============================================================================
+name: Дашборд арканы с самоцветом
+
+on:
+  schedule:
+    - cron: "*/20 * * * *"      # каждые 20 минут (GitHub может задерживать)
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Скан Steam и сборка страницы
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import subprocess, re, json, time, pathlib
+          from urllib.parse import quote
+
+          UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+          RATE = 82.57            # ₽ за $1 (курс Steam, срез 10.11.2026)
+          ARC = [("Terrorblade", "Fractal Horns of Inner Abysm", "Reflection's Shade"),
+                 ("Techies", "Swine of the Sunken Galley", "Explosive Burst")]
+          _last = [0.0]
+
+
+          def get(url, tries=3):
+              code = ""
+              for _ in range(tries):
+                  wait = 2.6 - (time.time() - _last[0])
+                  if wait > 0:
+                      time.sleep(wait)
+                  _last[0] = time.time()
+                  p = subprocess.run(["curl", "-sS", "-m", "45", "-H", "User-Agent: " + UA,
+                                      "-H", "Accept: */*", "-w", "\n%{http_code}", url],
+                                     capture_output=True)
+                  body, _, code = p.stdout.decode("utf-8", "replace").rpartition("\n")
+                  if code.strip() == "200":
+                      return body
+                  if code.strip() == "429":
+                      print("429 — пауза 20 с")
+                      time.sleep(20)
+              raise RuntimeError("HTTP %s %s" % (code.strip(), url[:80]))
+
+
+          def unesc(s):
+              s = s.replace('\\\\\\"', '\x01').replace('\\\\"', '"').replace('\\"', '"').replace('\x01', '"')
+              return s.replace('\\u003c', '<').replace('\\u003e', '>').replace('\\u0026', '&')
+
+
+          SOCK = re.compile(r'>([^<]{2,48})</span><br><span style="font-size: 12px">([^<]+)</span>')
+
+
+          def parse_page(h):
+              out = []
+              for chunk in h.split('listingid')[1:]:
+                  sub = unesc(chunk[:20000])
+                  mp = re.search(r'strSubtotal":"(\$[\d,\.]+)"', sub)
+                  if not mp:
+                      continue
+                  gem = None
+                  for gname, gtype in SOCK.findall(sub):
+                      if gtype.strip().lower() == "prismatic gem":
+                          gem = gname.strip()
+                          break
+                  out.append({"price": float(mp.group(1).replace("$", "").replace(",", "")), "gem": gem})
+              return out
+
+
+          def listings(name):
+              base = "https://steamcommunity.com/market/listings/570/" + quote(name) + "/render/"
+              first = get(base + "?query=&start=0&count=20&currency=1&language=english&format=json")
+              m = re.search(r'total_count[^0-9]{1,8}(\d{1,7})', first)
+              total = int(m.group(1)) if m else 0
+              rows = parse_page(first)
+              for start in range(20, total, 20):
+                  rows += parse_page(get(base + "?query=&start=%d&count=20&currency=1"
+                                               "&language=english&format=json" % start))
+              seen, uniq = set(), []
+              for r in rows:
+                  k = (r["price"], r["gem"])
+                  if k not in seen:
+                      seen.add(k)
+                      uniq.append(r)
+              return uniq
+
+
+          def gems():
+              out, start, page = {}, 0, 0
+              while start < 200 and page < 12:
+                  d = json.loads(get("https://steamcommunity.com/market/search/render/?query=prismatic"
+                                     "&appid=570&norender=1&count=10&start=%d&currency=1" % start))
+                  for r in d.get("results") or []:
+                      n = r["hash_name"]
+                      if n.startswith("Prismatic: "):
+                          out[n[11:]] = (r["sell_price"] / 100.0, r.get("sell_listings") or 0)
+                  start += 10
+                  page += 1
+                  if start >= (d.get("searchdata", {}).get("total_count") or 0):
+                      break
+              return out
+
+
+          def rub(usd):
+              return "{:,}".format(round(usd * RATE)).replace(",", "\u2009") + " \u20bd"
+
+
+          def main():
+              print("scan: gems")
+              g = gems()
+              deals, base = [], {}
+              for hero, name, default_gem in ARC:
+                  print("scan:", hero)
+                  lots = listings(name)
+                  if not lots:
+                      raise SystemExit("Steam вернул пустой список лотов")
+                  b = min(l["price"] for l in lots)
+                  base[hero] = b
+                  for l in lots:
+                      if not l["gem"] or l["gem"] not in g:
+                          continue
+                      gp, gn = g[l["gem"]]
+                      setp = b + gp
+                      deals.append({"hero": hero, "gem": l["gem"], "price": l["price"], "gemv": gp,
+                                    "n": gn, "setp": setp, "save": setp - l["price"],
+                                    "pct": 100.0 * (setp - l["price"]) / setp, "def": l["gem"] == default_gem})
+              deals.sort(key=lambda d: -d["save"])
+
+              live = [d for d in deals if not d["def"]]
+              best = max(live, key=lambda d: d["save"]) if live else None
+              pct = max(live, key=lambda d: d["pct"]) if live else None
+              cheap = min([d for d in live if d["pct"] >= 15] or live, key=lambda d: d["price"]) if live else None
+
+              def card(d, tag, cls=""):
+                  if not d:
+                      return ""
+                  return ('<div class="card %s"><div class="tag">%s</div>'
+                          '<div class="big">%s</div><div class="gem"><i style="background:%s"></i>%s &middot; %s</div>'
+                          '<div class="small">гем отдельно %s &middot; собрать самому %s<br>'
+                          '<span class="pos">выгода %s (%d%%)</span></div></div>'
+                          % (cls, tag, rub(d["price"]), color(d["gem"]), d["gem"], d["hero"],
+                             rub(d["gemv"]), rub(d["setp"]), rub(d["save"]), round(d["pct"])))
+
+              rows = []
+              for d in deals:
+                  if d["def"]:
+                      continue
+                  rows.append(
+                      '<tr data-gem="%s" data-price="%d" data-save="%d" data-pct="%d">'
+                      '<td><b>%s</b><div class="mut">$%.2f</div></td>'
+                      '<td><i style="background:%s"></i>%s<div class="mut">%s &middot; гемов: %d</div></td>'
+                      '<td class="num">%s</td><td class="num mut">%s</td>'
+                      '<td class="num pos">&minus;%s<div class="mut">%d%%</div></td></tr>'
+                      % (d["gem"].lower(), round(d["price"] * RATE), round(d["save"] * RATE), round(d["pct"]),
+                         rub(d["price"]), d["price"], color(d["gem"]), d["gem"],
+                         d["hero"], d["n"], rub(d["gemv"]), rub(d["setp"]), rub(d["save"]), round(d["pct"])))
+              stamp = time.strftime("%d.%m.%Y %H:%M UTC", time.gmtime())
+              page = (TEMPLATE
+                      .replace("%%CARDS%%", card(best, "максимальная выгода в рублях") +
+                               card(pct, "лучший процент", "c2") +
+                               card(cheap, "самый дешёвый вход (&ge;15%)", "c3"))
+                      .replace("%%ROWS%%", "".join(rows))
+                      .replace("%%STAMP%%", stamp)
+                      .replace("%%COUNT%%", str(len(deals)))
+                      .replace("%%TB%%", rub(base.get("Terrorblade", 0)))
+                      .replace("%%TE%%", rub(base.get("Techies", 0)))
+                      .replace("%%GEMS%%", str(len(g))))
+              out = pathlib.Path("public")
+              out.mkdir(exist_ok=True)
+              (out / "index.html").write_text(page, encoding="utf-8")
+              print("public/index.html: %d лотов с гемом" % len(deals))
+
+
+          COLORS = {"orange": "#ff8a3d", "ember flame": "#ff5a2e", "light green": "#a6e05a",
+                    "earth green": "#4a8f4a", "deep green": "#1f6b3a", "purple": "#8b3dd6",
+                    "bright purple": "#b45cff", "blue": "#2d7dff", "deep blue": "#1f4fd6",
+                    "crystalline blue": "#59c6e0", "ships in the night": "#1d2b52",
+                    "dungeon doom": "#7a3f2a", "miasmatic grey": "#6f7a6a", "plague grey": "#8a9a7a",
+                    "cursed black": "#20232a", "plushy shag": "#c96fa8", "rubiline": "#c02040",
+                    "blossom red": "#e0304f", "red": "#c2263a", "gold": "#d4a338",
+                    "explosive burst": "#ff6b1a", "unhallowed ground": "#4a4a6a",
+                    "dredge earth": "#6b5a3a", "diretide orange": "#f08030",
+                    "brusque britches beige": "#c2a97a", "vermillion renewal": "#e04a1a",
+                    "champion's purple": "#9b5cff", "champion's blue": "#4a7cff",
+                    "champion's green": "#2fae6a", "sea green": "#3fbfa8", "summer warmth": "#ffb347",
+                    "placid blue": "#6d9fd6", "bright green": "#37e06a", "verdant green": "#5fbf7a",
+                    "reflection's shade": "#ff3c28", "tnim s'nnam": "#3fa0a0",
+                    "glacial flow": "#8ee6ff", "pyroclastic flow": "#ff4a1a", "midas gold": "#e8b93c",
+                    "creator's light": "#fff2c2"}
+
+
+          def color(g):
+              return COLORS.get(g.lower(), "#6cb6ff")
+
+
+          TEMPLATE = """<!DOCTYPE html>
+          <html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+          <title>Dota 2: аркана + самоцвет &mdash; выгода</title>
+          <style>
+          *{box-sizing:border-box}
+          body{margin:0;background:#0b0e13;color:#e7ebf2;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial}
+          .wrap{max-width:1000px;margin:0 auto;padding:22px 16px 60px}
+          h1{font-size:20px;margin:0 0 4px}
+          .sub{color:#8794a8;font-size:12.5px;margin:0 0 18px}
+          .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+          .card{background:#141922;border:1px solid #232c3a;border-radius:14px;padding:14px 16px;position:relative;overflow:hidden}
+          .card:before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:#4fd18b}
+          .card.c2:before{background:#6cb6ff}.card.c3:before{background:#a97ede}
+          .card .tag{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#8794a8;font-weight:700}
+          .card .big{font-size:23px;font-weight:800;margin:4px 0 2px}
+          .card .gem{font-size:13px;font-weight:600}
+          .card .small{font-size:11.5px;color:#8794a8;margin-top:7px}
+          .pos{color:#4fd18b;font-weight:700}
+          .mut{color:#7f8b9d;font-size:11px}
+          i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:7px}
+          .bar{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 10px}
+          input,select{font:inherit;font-size:13px;background:#141922;border:1px solid #232c3a;color:#e7ebf2;border-radius:9px;padding:8px 10px}
+          input{width:200px}
+          table{width:100%;border-collapse:collapse;font-size:13.5px;background:#141922;border-radius:12px;overflow:hidden}
+          th{text-align:left;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#8794a8;padding:10px;border-bottom:1px solid #232c3a}
+          td{padding:9px 10px;border-bottom:1px solid #1a2230}
+          tr:hover{background:#171f2b}
+          .num{text-align:right;white-space:nowrap}
+          a{color:#6cb6ff;text-decoration:none}
+          .foot{color:#7f8b9d;font-size:11.5px;margin-top:20px;line-height:1.6;border-top:1px solid #232c3a;padding-top:14px}
+          @media(max-width:800px){.cards{grid-template-columns:1fr}}
+          </style></head><body><div class="wrap">
+          <h1>Dota 2: аркана с самоцветом &mdash; где выгода</h1>
+          <p class="sub">Снимок Steam Community Market: %%STAMP%% &middot; лотов с гемом: %%COUNT%% &middot;
+          гемов: %%GEMS%% &middot; дешёвая аркана: Terrorblade %%TB%%, Techies %%TE%%.
+          Обновляется автоматически по расписанию GitHub Actions.</p>
+          <div class="cards">%%CARDS%%</div>
+          <div class="bar">
+            <input id="q" placeholder="Поиск по самоцвету&hellip;" oninput="f()">
+            <select id="s" onchange="f()">
+              <option value="save">сортировка: выгода</option>
+              <option value="pct">выгода %</option>
+              <option value="price">цена</option>
+            </select>
+          </div>
+          <table id="t"><thead><tr><th>Лот</th><th>Самоцвет в сокете</th><th class="num">Гем отдельно</th>
+          <th class="num">Аркана + гем</th><th class="num">Выгода</th></tr></thead>
+          <tbody>%%ROWS%%</tbody></table>
+          <div class="foot">
+          <b>Как считается.</b> Выгода = (самый дешёвый лот арканы + самый дешёвый лот этого гема на Steam)
+          &minus; цена готового лота. Процент &mdash; скидка к сборке того же вида.<br>
+          Прайзматический сокет есть только у двух аркан: Terrorblade (Fractal Horns of Inner Abysm) и
+          Techies (Swine of the Sunken Galley). В остальные арканы гем не вставить.<br>
+          <b>Важно:</b> при замене гема старый уничтожается, а Steam берёт 15% при продаже &mdash; это экономия
+          на сборке, а не арбитраж. Лоты уникальны: конкретный лот с нужным гемом уйдёт.<br>
+          Дефолтные гемы (Terrorblade &mdash; Reflection's Shade, Techies &mdash; Explosive Burst) в таблицу не попадают:
+          это штатная комплектация, а не апгрейд. Полная версия с фильтрами, историей цен и CSV &mdash;
+          Docker-образ из того же проекта.
+          </div></div>
+          <script>
+          var t=document.getElementById('t');
+          var rows=[].slice.call(t.tBodies[0].rows);
+          function f(){
+            var q=(document.getElementById('q').value||'').toLowerCase();
+            var s=document.getElementById('s').value;
+            var key=s=='price'?'price':(s=='pct'?'pct':'save');
+            rows.sort(function(a,b){return (+b.dataset[key])-(+a.dataset[key]);});
+            rows.forEach(function(r){
+              t.tBodies[0].appendChild(r);
+              r.style.display=((r.dataset.gem||'').indexOf(q)>-1)?'':'none';
+            });
+          }
+          </script></body></html>
+          """
+
+          main()
+          PY
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true      # попытаться включить Pages автоматически
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
