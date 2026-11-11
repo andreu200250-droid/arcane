@@ -10,7 +10,7 @@ name: Дашборд арканы с самоцветом
 
 on:
   schedule:
-    - cron: "*/20 * * * *"      # каждые 20 минут (GitHub может задерживать)
+    - cron: "9,29,49 * * * *"      # каждые 20 минут (GitHub может задерживать)
   push:
     branches: [main, master]
   workflow_dispatch:
