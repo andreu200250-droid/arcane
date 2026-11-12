@@ -22,7 +22,7 @@ permissions:
 
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -47,7 +47,13 @@ jobs:
           ARC = [("Terrorblade", "Fractal Horns of Inner Abysm", "Reflection's Shade"),
                  ("Techies", "Swine of the Sunken Galley", "Explosive Burst")]
           _last = [0.0]
-          THROTTLE = 4.0          # пауза между запросами к Steam, сек
+          THROTTLE = 3.0          # пауза между запросами к Steam, сек
+          LOG = []
+
+
+          def log(msg):
+              print(msg)
+              LOG.append(msg)
 
 
           def get(url, tries=5):
@@ -62,10 +68,11 @@ jobs:
                                      capture_output=True)
                   body, _, code = p.stdout.decode("utf-8", "replace").rpartition("\n")
                   c = code.strip()
+                  log("  GET %s -> %s" % (url.split("?")[0][-45:], c or "нет ответа"))
                   if c == "200":
                       return body
-                  print("  попытка %d/%d — HTTP %s" % (attempt + 1, tries, c or "нет ответа"))
-                  time.sleep(30 + 20 * attempt)   # 30, 50, 70, 90 с
+                  log("  попытка %d/%d не удалась" % (attempt + 1, tries))
+                  time.sleep(20 + 10 * attempt)   # 20, 30, 40, 50 с
               raise RuntimeError("HTTP %s %s" % (code.strip(), url[:80]))
 
 
@@ -314,7 +321,13 @@ jobs:
           </script></body></html>
           """
 
-          main()
+          try:
+              main()
+          except BaseException as e:
+              import traceback
+              log("СБОЙ: " + "".join(traceback.format_exception(type(e), e, e.__traceback__)).replace("\n", " / "))
+              print("::error::" + " | ".join(LOG[-30:])[:9000])
+              raise
           PY
 
       - uses: actions/configure-pages@v5
