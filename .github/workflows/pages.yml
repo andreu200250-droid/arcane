@@ -29,6 +29,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - name: Вернуть Pages в режим GitHub Actions
+        run: |
+          echo '{"build_type":"workflow","source":null}' \
+            | gh api -X PUT "repos/${{ github.repository }}/pages" --input - \
+            && echo "Pages: режим GitHub Actions" || echo "не удалось переключить режим Pages (нужны права)"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Скан Steam и сборка страницы
         shell: bash
         run: |
