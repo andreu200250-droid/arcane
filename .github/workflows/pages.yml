@@ -106,7 +106,8 @@ jobs:
                       uniq.append(r)
               page = "https://steamcommunity.com/market/listings/570/" + quote(name)
               for i, r in enumerate(uniq):
-                  r["url"] = page + ("?start=%d#listing_%s" % (i, r["id"]) if r["id"] else "")
+                  # Steam открывает страницу рынка со start-го лота, но только если start кратен 20
+                  r["url"] = page + ("?start=%d#listing_%s" % (i // 20 * 20, r["id"]) if r["id"] else "")
               return uniq
 
 
