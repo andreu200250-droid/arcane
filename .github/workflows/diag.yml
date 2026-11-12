@@ -11,29 +11,45 @@ jobs:
         with:
           ref: main
           persist-credentials: true
-      - name: Проверить ответы Steam
+      - name: Разобрать страницу рынка
         run: |
           UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+          B="https://steamcommunity.com/market/listings/570/Fractal%20Horns%20of%20Inner%20Abysm"
           {
             echo "время: $(date -u '+%d.%m.%Y %H:%M UTC')"
-            for u in \
-              "https://steamcommunity.com/market/listings/570/Fractal%20Horns%20of%20Inner%20Abysm/render/?query=&start=0&count=20&currency=1&language=english&format=json" \
-              "https://steamcommunity.com/market/listings/570/Fractal%20Horns%20of%20Inner%20Abysm/render/?query=&start=20&count=20&currency=1&language=english&format=json" \
-              "https://steamcommunity.com/market/listings/570/Swine%20of%20the%20Sunken%20Galley/render/?query=&start=0&count=20&currency=1&language=english&format=json" \
-              "https://steamcommunity.com/market/search/render/?query=prismatic&appid=570&norender=1&count=10&start=0&currency=1" \
-              "https://steamcommunity.com/market/listings/570/Fractal%20Horns%20of%20Inner%20Abysm/?start=0" ; do
-              echo "=== $u"
-              code=$(curl -sS -m 45 -H "User-Agent: $UA" -H "Accept: */*" -o /tmp/body -w "%{http_code}" "$u")
-              echo "HTTP $code | байт: $(wc -c < /tmp/body)"
-              echo "--- начало ответа:"
-              head -c 200 /tmp/body; echo
-              echo "--- маркеры: listingid=$(grep -c listingid /tmp/body) | total_count=$(grep -o 'total_count[^0-9]\{1,8\}[0-9]\{1,7\}' /tmp/body | head -1) | success=$(grep -c '\"success\"' /tmp/body) | error=$(grep -ci 'an error was encountered' /tmp/body)"
-              echo
+            echo "############ 1. обычная страница ?start=0&count=20"
+            curl -sS -m 60 -H "User-Agent: $UA" -H "Accept: */*" -o /tmp/p0 "$B/?start=0&count=20"
+            echo "байт: $(wc -c < /tmp/p0)"
+            for k in listingid strSubtotal socket_item "Prismatic Gem" total_count; do
+              echo "  вхождений '$k': $(grep -o "$k" /tmp/p0 | wc -l)"
             done
+            echo "--- контекст первого listingid (900 символов):"
+            grep -o 'listingid.\{0,900\}' /tmp/p0 | head -1
+            echo
+            echo "--- контекст первого strSubtotal (400):"
+            grep -o '.\{150\}strSubtotal.\{250\}' /tmp/p0 | head -1
+            echo
+            echo "--- контекст socket_item (600):"
+            grep -o '.\{200\}socket_item.\{400\}' /tmp/p0 | head -2
+            echo
+            echo "############ 2. страница ?start=20&count=20 — другие лоты?"
+            curl -sS -m 60 -H "User-Agent: $UA" -H "Accept: */*" -o /tmp/p20 "$B/?start=20&count=20"
+            echo "байт: $(wc -c < /tmp/p20) | listingid: $(grep -o listingid /tmp/p20 | wc -l)"
+            echo "первые 3 id: $(grep -o 'listingid[^0-9]\{0,12\}[0-9]\{6,25\}' /tmp/p20 | head -3 | tr '\n' ' ')"
+            echo "первые 3 id на start=0: $(grep -o 'listingid[^0-9]\{0,12\}[0-9]\{6,25\}' /tmp/p0 | head -3 | tr '\n' ' ')"
+            echo
+            echo "############ 3. render с X-Requested-With — отдаёт JSON?"
+            curl -sS -m 60 -H "User-Agent: $UA" -H "X-Requested-With: XMLHttpRequest" \
+                 -o /tmp/r1 "$B/render/?query=&start=0&count=20&currency=1&language=english&format=json"
+            echo "байт: $(wc -c < /tmp/r1) | начало: $(head -c 120 /tmp/r1)"
+            echo
+            echo "############ 4. render без query/format"
+            curl -sS -m 60 -H "User-Agent: $UA" -H "X-Requested-With: XMLHttpRequest" \
+                 -o /tmp/r2 "$B/render/?start=0&count=20"
+            echo "байт: $(wc -c < /tmp/r2) | начало: $(head -c 120 /tmp/r2)"
           } > scan.log 2>&1
-          cat scan.log
           git checkout -q -B diag
           git add -f scan.log
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit -q -m "диагностика ответов Steam [skip ci]"
+            commit -q -m "разбор страницы рынка [skip ci]"
           git push -q -f origin diag
