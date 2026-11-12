@@ -78,12 +78,14 @@ jobs:
                   mp = re.search(r'strSubtotal":"(\$[\d,\.]+)"', sub)
                   if not mp:
                       continue
+                  lm = re.search(r'(\d{6,25})', sub[:40])
                   gem = None
                   for gname, gtype in SOCK.findall(sub):
                       if gtype.strip().lower() == "prismatic gem":
                           gem = gname.strip()
                           break
-                  out.append({"price": float(mp.group(1).replace("$", "").replace(",", "")), "gem": gem})
+                  out.append({"price": float(mp.group(1).replace("$", "").replace(",", "")),
+                              "gem": gem, "id": lm.group(1) if lm else ""})
               return out
 
 
@@ -102,6 +104,9 @@ jobs:
                   if k not in seen:
                       seen.add(k)
                       uniq.append(r)
+              page = "https://steamcommunity.com/market/listings/570/" + quote(name)
+              for i, r in enumerate(uniq):
+                  r["url"] = page + ("?start=%d#listing_%s" % (i, r["id"]) if r["id"] else "")
               return uniq
 
 
@@ -143,7 +148,8 @@ jobs:
                       setp = b + gp
                       deals.append({"hero": hero, "gem": l["gem"], "price": l["price"], "gemv": gp,
                                     "n": gn, "setp": setp, "save": setp - l["price"],
-                                    "pct": 100.0 * (setp - l["price"]) / setp, "def": l["gem"] == default_gem})
+                                    "pct": 100.0 * (setp - l["price"]) / setp,
+                                    "def": l["gem"] == default_gem, "url": l["url"]})
               deals.sort(key=lambda d: -d["save"])
 
               live = [d for d in deals if not d["def"]]
@@ -157,9 +163,11 @@ jobs:
                   return ('<div class="card %s"><div class="tag">%s</div>'
                           '<div class="big">%s</div><div class="gem"><i style="background:%s"></i>%s &middot; %s</div>'
                           '<div class="small">гем отдельно %s &middot; собрать самому %s<br>'
-                          '<span class="pos">выгода %s (%d%%)</span></div></div>'
+                          '<span class="pos">выгода %s (%d%%)</span><br>'
+                          '<a class="lnk" href="%s" target="_blank" rel="noopener">открыть лот на Steam &#8599;</a>'
+                          '</div></div>'
                           % (cls, tag, rub(d["price"]), color(d["gem"]), d["gem"], d["hero"],
-                             rub(d["gemv"]), rub(d["setp"]), rub(d["save"]), round(d["pct"])))
+                             rub(d["gemv"]), rub(d["setp"]), rub(d["save"]), round(d["pct"]), d["url"]))
 
               rows = []
               for d in deals:
@@ -231,6 +239,7 @@ jobs:
           .card .gem{font-size:13px;font-weight:600}
           .card .small{font-size:11.5px;color:#8794a8;margin-top:7px}
           .pos{color:#4fd18b;font-weight:700}
+          .lnk{color:#6cb6ff;font-weight:600;text-decoration:none}
           .mut{color:#7f8b9d;font-size:11px}
           i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:7px}
           .bar{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 10px}
