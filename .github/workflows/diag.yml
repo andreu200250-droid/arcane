@@ -1,0 +1,39 @@
+name: Диагностика Steam
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  diag:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+      - name: Проверить ответы Steam
+        run: |
+          UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+          {
+            echo "время: $(date -u '+%d.%m.%Y %H:%M UTC')"
+            for u in \
+              "https://steamcommunity.com/market/listings/570/Fractal%20Horns%20of%20Inner%20Abysm/render/?query=&start=0&count=20&currency=1&language=english&format=json" \
+              "https://steamcommunity.com/market/listings/570/Fractal%20Horns%20of%20Inner%20Abysm/render/?query=&start=20&count=20&currency=1&language=english&format=json" \
+              "https://steamcommunity.com/market/listings/570/Swine%20of%20the%20Sunken%20Galley/render/?query=&start=0&count=20&currency=1&language=english&format=json" \
+              "https://steamcommunity.com/market/search/render/?query=prismatic&appid=570&norender=1&count=10&start=0&currency=1" \
+              "https://steamcommunity.com/market/listings/570/Fractal%20Horns%20of%20Inner%20Abysm/?start=0" ; do
+              echo "=== $u"
+              code=$(curl -sS -m 45 -H "User-Agent: $UA" -H "Accept: */*" -o /tmp/body -w "%{http_code}" "$u")
+              echo "HTTP $code | байт: $(wc -c < /tmp/body)"
+              echo "--- начало ответа:"
+              head -c 200 /tmp/body; echo
+              echo "--- маркеры: listingid=$(grep -c listingid /tmp/body) | total_count=$(grep -o 'total_count[^0-9]\{1,8\}[0-9]\{1,7\}' /tmp/body | head -1) | success=$(grep -c '\"success\"' /tmp/body) | error=$(grep -ci 'an error was encountered' /tmp/body)"
+              echo
+            done
+          } > scan.log 2>&1
+          cat scan.log
+          git checkout -q -B diag
+          git add -f scan.log
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "диагностика ответов Steam [skip ci]"
+          git push -q -f origin diag
