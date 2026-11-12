@@ -17,11 +17,9 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: dashboard
   cancel-in-progress: false
 
 jobs:
@@ -338,10 +336,6 @@ jobs:
           flush_log()
           PY
 
-      - uses: actions/configure-pages@v5
-        with:
-          enablement: true      # попытаться включить Pages автоматически
-
       - name: Сохранить журнал скана
         if: always()
         run: |
@@ -355,6 +349,10 @@ jobs:
       - name: Опубликовать страницу в ветку main
         if: always()
         run: |
+          if [ ! -f public/index.html ]; then
+            echo "скан не собрал страницу — нечего публиковать"
+            exit 0
+          fi
           cp public/index.html index.html
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -366,18 +364,4 @@ jobs:
             git push origin HEAD:main
             echo "опубликовано в main"
           fi
-
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: public
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - id: deployment
-        uses: actions/deploy-pages@v4
 
