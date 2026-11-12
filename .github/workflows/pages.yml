@@ -56,6 +56,13 @@ jobs:
               LOG.append(msg)
 
 
+          def flush_log():
+              try:
+                  pathlib.Path("scan.log").write_text("\n".join(LOG), encoding="utf-8")
+              except Exception:
+                  pass
+
+
           def get(url, tries=5):
               code = ""
               for attempt in range(tries):
@@ -326,15 +333,27 @@ jobs:
           except BaseException as e:
               import traceback
               log("СБОЙ: " + "".join(traceback.format_exception(type(e), e, e.__traceback__)).replace("\n", " / "))
-              print("::error::" + " | ".join(LOG[-30:])[:9000])
+              flush_log()
               raise
+          flush_log()
           PY
 
       - uses: actions/configure-pages@v5
         with:
           enablement: true      # попытаться включить Pages автоматически
 
+      - name: Сохранить журнал скана
+        if: always()
+        run: |
+          git checkout -q -B scan-log
+          git add -f scan.log 2>/dev/null || echo "журнала нет" > scan.log
+          git add -f scan.log
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "журнал скана [skip ci]" || echo "нечего коммитить"
+          git push -q -f origin scan-log || echo "пуш журнала не удался"
+
       - name: Опубликовать страницу в ветку main
+        if: always()
         run: |
           cp public/index.html index.html
           git config user.name "github-actions[bot]"
