@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dota 2: аркана + самоцвет &mdash; выгода</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#0b0e13;color:#e7ebf2;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial}
+.wrap{max-width:1000px;margin:0 auto;padding:22px 16px 60px}
+h1{font-size:20px;margin:0 0 4px}
+.sub{color:#8794a8;font-size:12.5px;margin:0 0 18px}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+.card{background:#141922;border:1px solid #232c3a;border-radius:14px;padding:14px 16px;position:relative;overflow:hidden}
+.card:before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:#4fd18b}
+.card.c2:before{background:#6cb6ff}.card.c3:before{background:#a97ede}
+.card .tag{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#8794a8;font-weight:700}
+.card .big{font-size:23px;font-weight:800;margin:4px 0 2px}
+.card .gem{font-size:13px;font-weight:600}
+.card .small{font-size:11.5px;color:#8794a8;margin-top:7px}
+.pos{color:#4fd18b;font-weight:700}
+.lnk{color:#6cb6ff;font-weight:600;text-decoration:none}
+.mut{color:#7f8b9d;font-size:11px}
+i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:7px}
+.bar{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 10px}
+input,select{font:inherit;font-size:13px;background:#141922;border:1px solid #232c3a;color:#e7ebf2;border-radius:9px;padding:8px 10px}
+input{width:200px}
+table{width:100%;border-collapse:collapse;font-size:13.5px;background:#141922;border-radius:12px;overflow:hidden}
+th{text-align:left;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#8794a8;padding:10px;border-bottom:1px solid #232c3a}
+td{padding:9px 10px;border-bottom:1px solid #1a2230}
+tr:hover{background:#171f2b}
+.num{text-align:right;white-space:nowrap}
+a{color:#6cb6ff;text-decoration:none}
+.foot{color:#7f8b9d;font-size:11.5px;margin-top:20px;line-height:1.6;border-top:1px solid #232c3a;padding-top:14px}
+@media(max-width:800px){.cards{grid-template-columns:1fr}}
+</style></head><body><div class="wrap">
+<h1>Dota 2: аркана с самоцветом &mdash; где выгода</h1>
+<p class="sub">Снимок Steam Community Market: 12.11.2026 11:45 UTC &middot; лотов с гемом: 3 &middot;
+гемов: 7 &middot; дешёвая аркана: Terrorblade 0 ₽, Techies 2 882 ₽.
+Обновляется автоматически по расписанию GitHub Actions.</p>
+<div class="cards"><div class="card "><div class="tag">максимальная выгода в рублях</div><div class="big">4 206 ₽</div><div class="gem"><i style="background:#c2a97a"></i>Brusque Britches Beige &middot; Techies</div><div class="small">гем отдельно 1 678 ₽ &middot; собрать самому 4 560 ₽<br><span class="pos">выгода 353 ₽ (8%)</span><br><a class="lnk" href="https://steamcommunity.com/market/listings/570/Swine%20of%20the%20Sunken%20Galley?start=0#listing_7377744731183698465" target="_blank" rel="noopener">открыть лот на Steam &#8599;</a></div></div><div class="card c2"><div class="tag">лучший процент</div><div class="big">4 206 ₽</div><div class="gem"><i style="background:#c2a97a"></i>Brusque Britches Beige &middot; Techies</div><div class="small">гем отдельно 1 678 ₽ &middot; собрать самому 4 560 ₽<br><span class="pos">выгода 353 ₽ (8%)</span><br><a class="lnk" href="https://steamcommunity.com/market/listings/570/Swine%20of%20the%20Sunken%20Galley?start=0#listing_7377744731183698465" target="_blank" rel="noopener">открыть лот на Steam &#8599;</a></div></div><div class="card c3"><div class="tag">самый дешёвый вход (&ge;15%)</div><div class="big">3 877 ₽</div><div class="gem"><i style="background:#ff3c28"></i>Reflection's Shade &middot; Techies</div><div class="small">гем отдельно 498 ₽ &middot; собрать самому 3 380 ₽<br><span class="pos">выгода -497 ₽ (-15%)</span><br><a class="lnk" href="https://steamcommunity.com/market/listings/570/Swine%20of%20the%20Sunken%20Galley?start=0#listing_7346843808778825301" target="_blank" rel="noopener">открыть лот на Steam &#8599;</a></div></div></div>
+<div class="bar">
+  <input id="q" placeholder="Поиск по самоцвету&hellip;" oninput="f()">
+  <select id="s" onchange="f()">
+    <option value="save">сортировка: выгода</option>
+    <option value="pct">выгода %</option>
+    <option value="price">цена</option>
+  </select>
+</div>
+<table id="t"><thead><tr><th>Лот</th><th>Самоцвет в сокете</th><th class="num">Гем отдельно</th>
+<th class="num">Аркана + гем</th><th class="num">Выгода</th></tr></thead>
+<tbody><tr data-gem="brusque britches beige" data-price="4206" data-save="353" data-pct="8"><td><b>4 206 ₽</b><div class="mut">$50.94</div></td><td><i style="background:#c2a97a"></i>Brusque Britches Beige<div class="mut">Techies &middot; гемов: 36</div></td><td class="num">1 678 ₽</td><td class="num mut">4 560 ₽</td><td class="num pos">&minus;353 ₽<div class="mut">8%</div></td></tr><tr data-gem="reflection's shade" data-price="3877" data-save="-497" data-pct="-15"><td><b>3 877 ₽</b><div class="mut">$46.95</div></td><td><i style="background:#ff3c28"></i>Reflection's Shade<div class="mut">Techies &middot; гемов: 200</div></td><td class="num">498 ₽</td><td class="num mut">3 380 ₽</td><td class="num pos">&minus;-497 ₽<div class="mut">-15%</div></td></tr><tr data-gem="reflection's shade" data-price="3926" data-save="-547" data-pct="-16"><td><b>3 926 ₽</b><div class="mut">$47.55</div></td><td><i style="background:#ff3c28"></i>Reflection's Shade<div class="mut">Techies &middot; гемов: 200</div></td><td class="num">498 ₽</td><td class="num mut">3 380 ₽</td><td class="num pos">&minus;-547 ₽<div class="mut">-16%</div></td></tr></tbody></table>
+<div class="foot">
+<b>Как считается.</b> Выгода = (самый дешёвый лот арканы + самый дешёвый лот этого гема на Steam)
+&minus; цена готового лота. Процент &mdash; скидка к сборке того же вида.<br>
+Прайзматический сокет есть только у двух аркан: Terrorblade (Fractal Horns of Inner Abysm) и
+Techies (Swine of the Sunken Galley). В остальные арканы гем не вставить.<br>
+<b>Важно:</b> при замене гема старый уничтожается, а Steam берёт 15% при продаже &mdash; это экономия
+на сборке, а не арбитраж. Лоты уникальны: конкретный лот с нужным гемом уйдёт.<br>
+Дефолтные гемы (Terrorblade &mdash; Reflection's Shade, Techies &mdash; Explosive Burst) в таблицу не попадают:
+это штатная комплектация, а не апгрейд. Полная версия с фильтрами, историей цен и CSV &mdash;
+Docker-образ из того же проекта.
+</div></div>
+<script>
+var t=document.getElementById('t');
+var rows=[].slice.call(t.tBodies[0].rows);
+function f(){
+  var q=(document.getElementById('q').value||'').toLowerCase();
+  var s=document.getElementById('s').value;
+  var key=s=='price'?'price':(s=='pct'?'pct':'save');
+  rows.sort(function(a,b){return (+b.dataset[key])-(+a.dataset[key]);});
+  rows.forEach(function(r){
+    t.tBodies[0].appendChild(r);
+    r.style.display=((r.dataset.gem||'').indexOf(q)>-1)?'':'none';
+  });
+}
+</script></body></html>
