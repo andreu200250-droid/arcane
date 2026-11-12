@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -29,6 +29,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: true
+
       - name: Скан Steam и сборка страницы
         shell: bash
         run: |
@@ -42,24 +47,25 @@ jobs:
           ARC = [("Terrorblade", "Fractal Horns of Inner Abysm", "Reflection's Shade"),
                  ("Techies", "Swine of the Sunken Galley", "Explosive Burst")]
           _last = [0.0]
+          THROTTLE = 4.0          # пауза между запросами к Steam, сек
 
 
-          def get(url, tries=3):
+          def get(url, tries=5):
               code = ""
-              for _ in range(tries):
-                  wait = 2.6 - (time.time() - _last[0])
+              for attempt in range(tries):
+                  wait = THROTTLE - (time.time() - _last[0])
                   if wait > 0:
                       time.sleep(wait)
                   _last[0] = time.time()
-                  p = subprocess.run(["curl", "-sS", "-m", "45", "-H", "User-Agent: " + UA,
+                  p = subprocess.run(["curl", "-sS", "-m", "60", "-H", "User-Agent: " + UA,
                                       "-H", "Accept: */*", "-w", "\n%{http_code}", url],
                                      capture_output=True)
                   body, _, code = p.stdout.decode("utf-8", "replace").rpartition("\n")
-                  if code.strip() == "200":
+                  c = code.strip()
+                  if c == "200":
                       return body
-                  if code.strip() == "429":
-                      print("429 — пауза 20 с")
-                      time.sleep(20)
+                  print("  попытка %d/%d — HTTP %s" % (attempt + 1, tries, c or "нет ответа"))
+                  time.sleep(30 + 20 * attempt)   # 30, 50, 70, 90 с
               raise RuntimeError("HTTP %s %s" % (code.strip(), url[:80]))
 
 
@@ -96,8 +102,11 @@ jobs:
               total = int(m.group(1)) if m else 0
               rows = parse_page(first)
               for start in range(20, total, 20):
-                  rows += parse_page(get(base + "?query=&start=%d&count=20&currency=1"
-                                               "&language=english&format=json" % start))
+                  try:
+                      rows += parse_page(get(base + "?query=&start=%d&count=20&currency=1"
+                                                  "&language=english&format=json" % start))
+                  except RuntimeError as e:
+                      print("  пропуск start=%d: %s" % (start, e))
               seen, uniq = set(), []
               for r in rows:
                   k = (r["price"], r["gem"])
@@ -113,14 +122,14 @@ jobs:
 
           def gems():
               out, start, page = {}, 0, 0
-              while start < 200 and page < 12:
+              while start < 300 and page < 4:
                   d = json.loads(get("https://steamcommunity.com/market/search/render/?query=prismatic"
-                                     "&appid=570&norender=1&count=10&start=%d&currency=1" % start))
+                                     "&appid=570&norender=1&count=100&start=%d&currency=1" % start))
                   for r in d.get("results") or []:
                       n = r["hash_name"]
                       if n.startswith("Prismatic: "):
                           out[n[11:]] = (r["sell_price"] / 100.0, r.get("sell_listings") or 0)
-                  start += 10
+                  start += 100
                   page += 1
                   if start >= (d.get("searchdata", {}).get("total_count") or 0):
                       break
@@ -137,9 +146,14 @@ jobs:
               deals, base = [], {}
               for hero, name, default_gem in ARC:
                   print("scan:", hero)
-                  lots = listings(name)
+                  try:
+                      lots = listings(name)
+                  except Exception as e:
+                      print("  скан %s не удался: %s" % (hero, e))
+                      lots = []
                   if not lots:
-                      raise SystemExit("Steam вернул пустой список лотов")
+                      print("  лотов нет — аркана пропущена")
+                      continue
                   b = min(l["price"] for l in lots)
                   base[hero] = b
                   for l in lots:
@@ -151,6 +165,8 @@ jobs:
                                     "n": gn, "setp": setp, "save": setp - l["price"],
                                     "pct": 100.0 * (setp - l["price"]) / setp,
                                     "def": l["gem"] == default_gem, "url": l["url"]})
+              if not deals:
+                  raise SystemExit("Steam не отдал ни одного лота с гемом")
               deals.sort(key=lambda d: -d["save"])
 
               live = [d for d in deals if not d["def"]]
@@ -304,6 +320,20 @@ jobs:
       - uses: actions/configure-pages@v5
         with:
           enablement: true      # попытаться включить Pages автоматически
+
+      - name: Опубликовать страницу в ветку main
+        run: |
+          cp public/index.html index.html
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          if git diff --cached --quiet; then
+            echo "index.html не изменился"
+          else
+            git commit -q -m "Дашборд: снимок рынка [skip ci]"
+            git push origin HEAD:main
+            echo "опубликовано в main"
+          fi
 
       - uses: actions/upload-pages-artifact@v3
         with:
