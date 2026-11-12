@@ -108,15 +108,15 @@ jobs:
 
 
           def listings(name):
-              base = "https://steamcommunity.com/market/listings/570/" + quote(name) + "/render/"
-              first = get(base + "?query=&start=0&count=20&currency=1&language=english&format=json")
+              # Steam отдаёт лоты на обычной странице рынка: /render/ больше не отдаёт их все
+              base = "https://steamcommunity.com/market/listings/570/" + quote(name)
+              first = get(base + "?start=0&count=20")
               m = re.search(r'total_count[^0-9]{1,8}(\d{1,7})', first)
               total = int(m.group(1)) if m else 0
               rows = parse_page(first)
               for start in range(20, total, 20):
                   try:
-                      rows += parse_page(get(base + "?query=&start=%d&count=20&currency=1"
-                                                  "&language=english&format=json" % start))
+                      rows += parse_page(get(base + "?start=%d&count=20" % start))
                   except RuntimeError as e:
                       print("  пропуск start=%d: %s" % (start, e))
               seen, uniq = set(), []
@@ -134,14 +134,14 @@ jobs:
 
           def gems():
               out, start, page = {}, 0, 0
-              while start < 300 and page < 4:
+              while start < 200 and page < 12:
                   d = json.loads(get("https://steamcommunity.com/market/search/render/?query=prismatic"
-                                     "&appid=570&norender=1&count=100&start=%d&currency=1" % start))
+                                     "&appid=570&norender=1&count=10&start=%d&currency=1" % start))
                   for r in d.get("results") or []:
                       n = r["hash_name"]
                       if n.startswith("Prismatic: "):
                           out[n[11:]] = (r["sell_price"] / 100.0, r.get("sell_listings") or 0)
-                  start += 100
+                  start += 10
                   page += 1
                   if start >= (d.get("searchdata", {}).get("total_count") or 0):
                       break
@@ -336,16 +336,6 @@ jobs:
           flush_log()
           PY
 
-      - name: Сохранить журнал скана
-        if: always()
-        run: |
-          git checkout -q -B scan-log
-          git add -f scan.log 2>/dev/null || echo "журнала нет" > scan.log
-          git add -f scan.log
-          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit -q -m "журнал скана [skip ci]" || echo "нечего коммитить"
-          git push -q -f origin scan-log || echo "пуш журнала не удался"
-
       - name: Опубликовать страницу в ветку main
         if: always()
         run: |
@@ -357,6 +347,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add index.html
+          git rm -q --cached scan.log 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "index.html не изменился"
           else
@@ -364,4 +355,13 @@ jobs:
             git push origin HEAD:main
             echo "опубликовано в main"
           fi
+
+      - name: Сохранить журнал скана
+        if: always()
+        run: |
+          git checkout -q -B scan-log
+          git add -f scan.log
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "журнал скана [skip ci]" || echo "нечего коммитить"
+          git push -q -f origin HEAD:scan-log || echo "пуш журнала не удался"
 
