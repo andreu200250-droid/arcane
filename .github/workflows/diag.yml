@@ -19,33 +19,34 @@ jobs:
             echo "время: $(date -u '+%d.%m.%Y %H:%M UTC')"
             curl -sS -m 60 -H "User-Agent: $UA" -o /tmp/p0 "$B/?start=0&count=20"
             echo "=== listingid на странице start=0:"
-            grep -o 'listingid[^0-9]\{1,12\}[0-9]\{6,25\}' /tmp/p0 | head -5
+            grep -o 'listingid[^0-9]\{1,12\}[0-9]\{6,25\}' /tmp/p0 | head -5 || true
             echo
             echo "=== id из ссылок пользователя есть среди них?"
             for id in 2805186240185775134 536648744054797752; do
-              echo "  $id -> $(grep -c "$id" /tmp/p0) раз на странице"
+              echo "  $id -> $(grep -c "$id" /tmp/p0 || true) раз на странице"
             done
             echo
-            echo "=== чем Steam помечает строку лота (id=listing_...):"
-            grep -o 'id=\\"listing_[0-9]\{6,25\}\\"' /tmp/p0 | head -3
+            echo "=== чем Steam помечает строку лота:"
+            grep -o 'id=\\"listing_[0-9]\{6,25\}\\"' /tmp/p0 | head -3 || true
             echo
-            echo "=== ссылка с detail=<наш listingid> — что отвечает Steam:"
-            OUR=$(grep -o 'listingid[^0-9]\{1,12\}[0-9]\{6,25\}' /tmp/p0 | head -1 | grep -o '[0-9]\{6,25\}')
+            echo "=== ссылка с detail=<наш listingid>:"
+            OUR=$(grep -o 'listingid[^0-9]\{1,12\}[0-9]\{6,25\}' /tmp/p0 | head -1 | grep -o '[0-9]\{6,25\}' || true)
             echo "  берём listingid=$OUR"
             curl -sS -m 60 -H "User-Agent: $UA" -o /tmp/d1 "$B/?appid=570&sort=0&dir=0&detail=$OUR"
-            echo "  HTTP-код и размер: $(wc -c < /tmp/d1) байт"
-            echo "  есть ли на ней этот лот: $(grep -c "$OUR" /tmp/d1)"
-            echo "  ошибка Steam: $(grep -ci 'an error was encountered' /tmp/d1)"
+            echo "  размер ответа: $(wc -c < /tmp/d1) байт"
+            echo "  этот лот на странице: $(grep -c "$OUR" /tmp/d1 || true) раз"
+            echo "  ошибка Steam: $(grep -ci 'an error was encountered' /tmp/d1 || true)"
             echo
             echo "=== detail с заведомо nonexistent id:"
             curl -sS -m 60 -H "User-Agent: $UA" -o /tmp/d2 "$B/?appid=570&sort=0&dir=0&detail=1"
-            echo "  размер: $(wc -c < /tmp/d2) байт | ошибка: $(grep -ci 'an error was encountered' /tmp/d2)"
+            echo "  размер: $(wc -c < /tmp/d2) байт | ошибка: $(grep -ci 'an error was encountered' /tmp/d2 || true)"
             echo
-            echo "=== что делает JS с detail (кусок кода):"
-            grep -o '.\{80\}detail.\{200\}' /tmp/p0 | head -3
+            echo "=== упоминание detail в коде страницы:"
+            grep -o '.\{60\}detail.\{160\}' /tmp/p0 | head -3 || true
+            echo "=== готово"
           } > scan.log 2>&1
           git checkout -q -B diag
           git add -f scan.log
           git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit -q -m "проверка detail [skip ci]"
-          git push -q -f origin HEAD:diag
+            commit -q -m "проверка detail [skip ci]" || echo "нечего коммитить"
+          git push -q -f origin HEAD:diag || echo "пуш журнала не удался"
