@@ -61,7 +61,7 @@ jobs:
                   pass
 
 
-          def get(url, tries=5, want=None):
+          def get(url, tries=6, want=None):
               code, why = "", "нет ответа"
               for attempt in range(tries):
                   wait = THROTTLE - (time.time() - _last[0])
@@ -79,12 +79,14 @@ jobs:
                       if want and want not in body:
                           why = "страница без данных (%s)" % want
                           log("  %s — повтор %d/%d" % (why, attempt + 1, tries))
-                          time.sleep(20 + 10 * attempt)   # 20, 30, 40, 50 с
+                          time.sleep(30 + 20 * attempt)   # 30, 50, 70, 90, 110 с
                           continue
                       return body
                   why = "HTTP %s" % (c or "нет ответа")
-                  log("  попытка %d/%d не удалась (%s)" % (attempt + 1, tries, why))
-                  time.sleep(20 + 10 * attempt)   # 20, 30, 40, 50 с
+                  # 429 от Steam держится дольше минуты — ждём дольше и больше попыток
+                  pause = (40 + 20 * attempt) if c == "429" else (20 + 10 * attempt)
+                  log("  попытка %d/%d не удалась (%s), ждём %d с" % (attempt + 1, tries, why, pause))
+                  time.sleep(pause)
               raise RuntimeError("%s %s" % (why, url[:80]))
 
 
