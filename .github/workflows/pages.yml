@@ -46,6 +46,7 @@ jobs:
                  ("Techies", "Swine of the Sunken Galley", "Explosive Burst")]
           _last = [0.0]
           THROTTLE = 3.0          # пауза между запросами к Steam, сек
+          SCAN_LIMIT = 420        # максимум на весь скан, сек (диспатч приходит каждые 10 минут)
           LOG = []
 
 
@@ -61,9 +62,14 @@ jobs:
                   pass
 
 
-          def get(url, tries=6, want=None):
+          DEADLINE = [1e18]
+
+
+          def get(url, tries=5, want=None):
               code, why = "", "нет ответа"
               for attempt in range(tries):
+                  if time.time() > DEADLINE[0]:
+                      raise RuntimeError("время скана вышло")
                   wait = THROTTLE - (time.time() - _last[0])
                   if wait > 0:
                       time.sleep(wait)
@@ -79,12 +85,12 @@ jobs:
                       if want and want not in body:
                           why = "страница без данных (%s)" % want
                           log("  %s — повтор %d/%d" % (why, attempt + 1, tries))
-                          time.sleep(30 + 20 * attempt)   # 30, 50, 70, 90, 110 с
+                          time.sleep(20 + 15 * attempt)   # 20, 35, 50, 65 с
                           continue
                       return body
                   why = "HTTP %s" % (c or "нет ответа")
-                  # 429 от Steam держится дольше минуты — ждём дольше и больше попыток
-                  pause = (40 + 20 * attempt) if c == "429" else (20 + 10 * attempt)
+                  # 429 от Steam держится дольше минуты — для него пауза длиннее
+                  pause = (25 + 15 * attempt) if c == "429" else (15 + 10 * attempt)
                   log("  попытка %d/%d не удалась (%s), ждём %d с" % (attempt + 1, tries, why, pause))
                   time.sleep(pause)
               raise RuntimeError("%s %s" % (why, url[:80]))
@@ -124,6 +130,9 @@ jobs:
               total = int(m.group(1)) if m else 0
               rows = parse_page(first)
               for start in range(20, total, 20):
+                  if time.time() > DEADLINE[0]:
+                      log("  время скана вышло — остальные страницы пропускаю")
+                      break
                   try:
                       rows += parse_page(get(base + "?start=%d&count=20" % start, want="listingid"))
                   except RuntimeError as e:
@@ -146,7 +155,7 @@ jobs:
 
           def gems():
               out, start, page = {}, 0, 0
-              while start < 200 and page < 12:
+              while start < 200 and page < 12 and time.time() <= DEADLINE[0]:
                   d = json.loads(get("https://steamcommunity.com/market/search/render/?query=prismatic"
                                      "&appid=570&norender=1&count=10&start=%d&currency=1" % start,
                                      want='"success"'))
@@ -166,6 +175,7 @@ jobs:
 
 
           def main():
+              DEADLINE[0] = time.time() + SCAN_LIMIT
               print("scan: gems")
               g = gems()
               deals, base = [], {}
@@ -340,16 +350,7 @@ jobs:
           """
 
           try:
-              for attempt in range(2):
-                  try:
-                      main()
-                      break
-                  except SystemExit:
-                      if attempt == 0:
-                          log("скан вышел пустой — повтор через 60 с")
-                          time.sleep(60)
-                      else:
-                          raise
+              main()
           except BaseException as e:
               import traceback
               log("СБОЙ: " + "".join(traceback.format_exception(type(e), e, e.__traceback__)).replace("\n", " / "))
