@@ -61,8 +61,8 @@ jobs:
                   pass
 
 
-          def get(url, tries=5):
-              code = ""
+          def get(url, tries=5, want=None):
+              code, why = "", "нет ответа"
               for attempt in range(tries):
                   wait = THROTTLE - (time.time() - _last[0])
                   if wait > 0:
@@ -75,10 +75,17 @@ jobs:
                   c = code.strip()
                   log("  GET %s -> %s" % (url.split("?")[0][-45:], c or "нет ответа"))
                   if c == "200":
+                      # Steam иногда отвечает страницей ошибки с кодом 200 и без лотов
+                      if want and want not in body:
+                          why = "страница без данных (%s)" % want
+                          log("  %s — повтор %d/%d" % (why, attempt + 1, tries))
+                          time.sleep(20 + 10 * attempt)   # 20, 30, 40, 50 с
+                          continue
                       return body
-                  log("  попытка %d/%d не удалась" % (attempt + 1, tries))
+                  why = "HTTP %s" % (c or "нет ответа")
+                  log("  попытка %d/%d не удалась (%s)" % (attempt + 1, tries, why))
                   time.sleep(20 + 10 * attempt)   # 20, 30, 40, 50 с
-              raise RuntimeError("HTTP %s %s" % (code.strip(), url[:80]))
+              raise RuntimeError("%s %s" % (why, url[:80]))
 
 
           def unesc(s):
@@ -110,25 +117,28 @@ jobs:
           def listings(name):
               # Steam отдаёт лоты на обычной странице рынка: /render/ больше не отдаёт их все
               base = "https://steamcommunity.com/market/listings/570/" + quote(name)
-              first = get(base + "?start=0&count=20")
+              first = get(base + "?start=0&count=20", want="listingid")
               m = re.search(r'total_count[^0-9]{1,8}(\d{1,7})', first)
               total = int(m.group(1)) if m else 0
               rows = parse_page(first)
               for start in range(20, total, 20):
                   try:
-                      rows += parse_page(get(base + "?start=%d&count=20" % start))
+                      rows += parse_page(get(base + "?start=%d&count=20" % start, want="listingid"))
                   except RuntimeError as e:
                       print("  пропуск start=%d: %s" % (start, e))
               seen, uniq = set(), []
-              for r in rows:
+              for i, r in enumerate(rows):
                   k = (r["price"], r["gem"])
                   if k not in seen:
                       seen.add(k)
+                      r["idx"] = i          # позиция лота в выдаче Steam — для start
                       uniq.append(r)
               page = "https://steamcommunity.com/market/listings/570/" + quote(name)
-              for i, r in enumerate(uniq):
-                  # Steam открывает страницу рынка со start-го лота, но только если start кратен 20
-                  r["url"] = page + ("?start=%d#listing_%s" % (i // 20 * 20, r["id"]) if r["id"] else "")
+              for r in uniq:
+                  # Ссылка на конкретный лот: detail=<id лота>. start показывает ту страницу
+                  # выдачи, на которой лот находится (start обязан быть кратен 20)
+                  r["url"] = page + ("?appid=570&sort=0&dir=0&start=%d&detail=%s"
+                                     % (r["idx"] // 20 * 20, r["id"]) if r["id"] else "")
               return uniq
 
 
@@ -136,7 +146,8 @@ jobs:
               out, start, page = {}, 0, 0
               while start < 200 and page < 12:
                   d = json.loads(get("https://steamcommunity.com/market/search/render/?query=prismatic"
-                                     "&appid=570&norender=1&count=10&start=%d&currency=1" % start))
+                                     "&appid=570&norender=1&count=10&start=%d&currency=1" % start,
+                                     want='"success"'))
                   for r in d.get("results") or []:
                       n = r["hash_name"]
                       if n.startswith("Prismatic: "):
@@ -327,7 +338,16 @@ jobs:
           """
 
           try:
-              main()
+              for attempt in range(2):
+                  try:
+                      main()
+                      break
+                  except SystemExit:
+                      if attempt == 0:
+                          log("скан вышел пустой — повтор через 60 с")
+                          time.sleep(60)
+                      else:
+                          raise
           except BaseException as e:
               import traceback
               log("СБОЙ: " + "".join(traceback.format_exception(type(e), e, e.__traceback__)).replace("\n", " / "))
