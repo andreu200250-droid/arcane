@@ -10,7 +10,11 @@ name: Дашборд арканы с самоцветом
 
 on:
   schedule:
-    - cron: "9,29,49 * * * *"      # каждые 20 минут (GitHub может задерживать)
+    # Каждые 5 минут. Steam пускает к рынку не с каждого адреса GitHub Actions:
+    # удачный прогон выпадает примерно в трети случаев, поэтому чем чаще пробуем,
+    # тем меньше снимок успевает устареть. Одна заблокированная попытка стоит
+    # 4–8 запросов и ~2–3 минуты, так что стучаться чаще дешево.
+    - cron: "*/5 * * * *"          # GitHub может задерживать запуск на минуты
   push:
     branches: [main, master]
   workflow_dispatch:
@@ -35,8 +39,12 @@ jobs:
       - name: Скан Steam и сборка страницы
         shell: bash
         run: |
+          # Адрес прогона — в журнал скана: по нему видно, с каких адресов Steam
+          # не пускает, а с каких пускает. Если сервис недоступен — не беда.
+          RUN_IP="$(curl -s --max-time 10 https://api.ipify.org || echo неизвестно)"
+          export RUN_IP
           python3 - <<'PY'
-          import subprocess, re, json, time, pathlib
+          import os, subprocess, re, json, time, pathlib
           from urllib.parse import quote
 
           UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -306,6 +314,7 @@ jobs:
 
           def main():
               DEADLINE[0] = time.time() + SCAN_LIMIT
+              log("прогон с адреса %s" % os.environ.get("RUN_IP", "неизвестно"))
               print("scan: gems")
               g = gems()
               if not g:
