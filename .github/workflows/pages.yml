@@ -123,20 +123,42 @@ jobs:
 
 
           def listings(name):
-              # Steam отдаёт лоты на обычной странице рынка: /render/ больше не отдаёт их все
+              # Steam отдаёт лоты на обычной странице рынка: /render/ больше не отдаёт их все.
+              # Запрос count=100 отдаёт сразу 100 лотов, поэтому на версию арканы уходит
+              # 1-4 запроса вместо 18 — скан версий укладывается в минуты.
               base = "https://steamcommunity.com/market/listings/570/" + quote(name)
-              first = get(base + "?start=0&count=20", want="listingid")
-              m = re.search(r'total_count[^0-9]{1,8}(\d{1,7})', first)
-              total = int(m.group(1)) if m else 0
-              rows = parse_page(first)
-              for start in range(20, total, 20):
+              PAGE = 100
+              total, rows = 0, []
+              for attempt in range(2):
+                  first = get(base + "?start=0&count=%d" % PAGE, want="listingid")
+                  m = re.search(r'total_count[^0-9]{1,8}(\d{1,7})', first)
+                  total = int(m.group(1)) if m else 0
+                  rows = parse_page(first)
+                  # Steam сказал, что лоты есть, а страница пустая — берём её ещё раз
+                  if rows or not total or attempt:
+                      break
+                  print("  страница пустая при total_count=%d — повтор" % total)
+                  time.sleep(10)
+              for start in range(PAGE, total, PAGE):
                   if time.time() > DEADLINE[0]:
                       log("  время скана вышло — остальные страницы пропускаю")
                       break
-                  try:
-                      rows += parse_page(get(base + "?start=%d&count=20" % start, want="listingid"))
-                  except RuntimeError as e:
-                      print("  пропуск start=%d: %s" % (start, e))
+                  chunk = []
+                  for attempt in range(2):
+                      try:
+                          body = get(base + "?start=%d&count=%d" % (start, PAGE), want="listingid")
+                          chunk = parse_page(body)
+                          if len(chunk) >= min(PAGE, total - start):
+                              break
+                          print("  страница start=%d короткая (%d из %d лотов) — повтор"
+                                % (start, len(chunk), min(PAGE, total - start)))
+                      except RuntimeError as e:
+                          print("  start=%d: %s" % (start, e))
+                      time.sleep(10)
+                  if not chunk:
+                      print("  страница start=%d так и не отдалась — дальше не иду" % start)
+                      break
+                  rows += chunk
               seen, uniq = set(), []
               for i, r in enumerate(rows):
                   k = (r["price"], r["gem"])
@@ -151,6 +173,47 @@ jobs:
                   r["url"] = page + ("?appid=570&sort=0&dir=0&start=%d&detail=%s"
                                      % (r["idx"] // 20 * 20, r["id"]) if r["id"] else "")
               return uniq
+
+
+          def variants(name):
+              """Все версии одной и той же арканы: базовая, Exalted, Inscribed, Corrupted,
+              Autographed, Auspicious... Версия — предмет того же типа (Arcana Demon Horns,
+              Arcana Swine Cannon), поэтому «- Horns», «- Bundle» и прочие отдельные
+              предметы с похожим названием сюда не попадают."""
+              out, start, page, itype = [], 0, 0, ""
+              while start < 60 and page < 6:
+                  d = json.loads(get("https://steamcommunity.com/market/search/render/?query=%s"
+                                     "&appid=570&norender=1&count=10&start=%d&currency=1"
+                                     % (quote(name), start), want='"success"'))
+                  res = d.get("results") or []
+                  for r in res:              # тип предмета узнаём по базовой версии
+                      if (r.get("hash_name") or "") == name:
+                          itype = (r.get("asset_description") or {}).get("type") or itype
+                  found = 0
+                  if itype:
+                      for r in res:
+                          h = r.get("hash_name") or ""
+                          if name not in h or h in out:
+                              continue
+                          if ((r.get("asset_description") or {}).get("type") or "") == itype:
+                              out.append(h)
+                              found += 1
+                  start += 10
+                  page += 1
+                  if not res or start >= (d.get("searchdata", {}).get("total_count") or 0):
+                      break
+                  if not found:              # дальше только чужие предметы
+                      break
+              if name not in out:             # поиск не отдал базовую — сканируем только её
+                  out = [name]
+              return out
+
+
+          def ver_suffix(vname, name):
+              """« · Inscribed», « · Exalted» — чем версия отличается от базовой."""
+              if not vname or vname == name:
+                  return ""
+              return " · " + vname[:len(vname) - len(name)].strip(" -")
 
 
           def gems():
@@ -181,22 +244,55 @@ jobs:
               deals, base = [], {}
               for hero, name, default_gem in ARC:
                   print("scan:", hero)
+                  lots = []
+                  # сначала базовая версия: её данные уже стоят на сайте, её терять нельзя
                   try:
-                      lots = listings(name)
+                      got = listings(name)
                   except Exception as e:
-                      print("  скан %s не удался: %s" % (hero, e))
-                      lots = []
+                      print("  скан %s не удался: %s" % (name, e))
+                      got = []
+                  for l in got:
+                      l["ver"] = name
+                  lots += got
+                  # потом остальные версии той же арканы: Exalted, Inscribed, Corrupted...
+                  try:
+                      vlist = [v for v in variants(name) if v != name]
+                  except Exception as e:
+                      print("  версии %s не нашлись: %s" % (name, e))
+                      vlist = []
+                  for vname in vlist:
+                      if time.time() > DEADLINE[0]:
+                          log("  время скана вышло — остальные версии пропускаю")
+                          break
+                      print("  версия:", vname)
+                      try:
+                          got = listings(vname)
+                      except Exception as e:
+                          print("  скан %s не удался: %s" % (vname, e))
+                          continue
+                      for l in got:
+                          l["ver"] = vname
+                      lots += got
                   if not lots:
                       print("  лотов нет — аркана пропущена")
                       continue
+                  # версии одной арканы — по сути один предмет: пара цена+гем не дублируется
+                  seen, uniq = set(), []
+                  for l in lots:
+                      k = (l["price"], l["gem"])
+                      if k not in seen:
+                          seen.add(k)
+                          uniq.append(l)
+                  lots = uniq
                   b = min(l["price"] for l in lots)
-                  base[hero] = b
+                  base[hero] = (b, ver_suffix(min(lots, key=lambda x: x["price"])["ver"], name))
                   for l in lots:
                       if not l["gem"] or l["gem"] not in g:
                           continue
                       gp, gn = g[l["gem"]]
                       setp = b + gp
-                      deals.append({"hero": hero, "gem": l["gem"], "price": l["price"], "gemv": gp,
+                      deals.append({"hero": hero + ver_suffix(l["ver"], name),
+                                    "gem": l["gem"], "price": l["price"], "gemv": gp,
                                     "n": gn, "setp": setp, "save": setp - l["price"],
                                     "pct": 100.0 * (setp - l["price"]) / setp,
                                     "def": l["gem"] == default_gem, "url": l["url"]})
@@ -234,6 +330,11 @@ jobs:
                       % (d["gem"].lower(), round(d["price"] * RATE), round(d["save"] * RATE), round(d["pct"]),
                          rub(d["price"]), d["price"], color(d["gem"]), d["gem"],
                          d["hero"], d["n"], rub(d["gemv"]), rub(d["setp"]), rub(d["save"]), round(d["pct"])))
+              def cheap_line(hero):
+                  p, v = base.get(hero, (0, ""))
+                  return rub(p) + v
+
+
               stamp = time.strftime("%d.%m.%Y %H:%M UTC", time.gmtime())
               page = (TEMPLATE
                       .replace("%%CARDS%%", card(best, "максимальная выгода в рублях") +
@@ -242,8 +343,8 @@ jobs:
                       .replace("%%ROWS%%", "".join(rows))
                       .replace("%%STAMP%%", stamp)
                       .replace("%%COUNT%%", str(len(deals)))
-                      .replace("%%TB%%", rub(base.get("Terrorblade", 0)))
-                      .replace("%%TE%%", rub(base.get("Techies", 0)))
+                      .replace("%%TB%%", cheap_line("Terrorblade"))
+                      .replace("%%TE%%", cheap_line("Techies"))
                       .replace("%%GEMS%%", str(len(g))))
               out = pathlib.Path("public")
               out.mkdir(exist_ok=True)
