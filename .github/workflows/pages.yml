@@ -280,9 +280,15 @@ jobs:
           def gems():
               out, start, page = {}, 0, 0
               while start < 200 and page < 12 and time.time() <= DEADLINE[0]:
-                  d = json.loads(get("https://steamcommunity.com/market/search/render/?query=prismatic"
-                                     "&appid=570&norender=1&count=10&start=%d&currency=1" % start,
-                                     want='"success"'))
+                  try:
+                      d = json.loads(get("https://steamcommunity.com/market/search/render/?query=prismatic"
+                                         "&appid=570&norender=1&count=10&start=%d&currency=1" % start,
+                                         want='"success"'))
+                  except Exception as e:
+                      # Steam может не пустить и к ценам гемов: берём то, что успели
+                      # собрать, а не роняем весь скан
+                      log("  цены гемов: %s — беру то, что успел" % e)
+                      break
                   for r in d.get("results") or []:
                       n = r["hash_name"]
                       if n.startswith("Prismatic: "):
@@ -302,6 +308,12 @@ jobs:
               DEADLINE[0] = time.time() + SCAN_LIMIT
               print("scan: gems")
               g = gems()
+              if not g:
+                  # Без цен гемов выгоду не посчитать, а сканировать лоты нечего:
+                  # сайт остаётся на прошлом снимке, прогон остаётся зелёным
+                  log("СБОЙ: цены гемов получить не удалось — "
+                      "оставлен прошлый снимок сайта, прогон не роняем")
+                  return
               deals, base = [], {}
               for hero, name, default_gem in ARC:
                   if STOP[0]:
@@ -318,6 +330,9 @@ jobs:
                       l["ver"] = name
                   lots += got
                   # потом остальные версии той же арканы: Exalted, Inscribed, Corrupted...
+                  if STOP[0]:
+                      log("  Steam не пускает — версии не ищу")
+                      continue
                   try:
                       vlist = [v for v in variants(name) if v != name]
                   except Exception as e:
