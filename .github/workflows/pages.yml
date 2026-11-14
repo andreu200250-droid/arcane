@@ -46,7 +46,8 @@ jobs:
                  ("Techies", "Swine of the Sunken Galley", "Explosive Burst")]
           _last = [0.0]
           THROTTLE = 3.0          # пауза между запросами к Steam, сек
-          SCAN_LIMIT = 420        # максимум на весь скан, сек (диспатч приходит каждые 10 минут)
+          SCAN_LIMIT = 330        # максимум на весь скан, сек (диспатч каждые 10 минут:
+                                   # здоровый скан идёт ~3.5 мин, остальное — запас на повторы)
           LOG = []
 
 
@@ -74,7 +75,7 @@ jobs:
                   if wait > 0:
                       time.sleep(wait)
                   _last[0] = time.time()
-                  p = subprocess.run(["curl", "-sS", "-m", "60", "-H", "User-Agent: " + UA,
+                  p = subprocess.run(["curl", "-sS", "-m", "45", "-H", "User-Agent: " + UA,
                                       "-H", "Accept: */*", "-w", "\n%{http_code}", url],
                                      capture_output=True)
                   body, _, code = p.stdout.decode("utf-8", "replace").rpartition("\n")
@@ -92,7 +93,7 @@ jobs:
                   # 429 от Steam держится дольше минуты, но ждём на одном адресе
                   # не больше ~3 минут: иначе серия отказов съедает весь лимит скана
                   # и прогон падает целиком вместо того, чтобы отдать хоть часть данных
-                  pause = (30 + 30 * attempt) if c == "429" else (15 + 10 * attempt)
+                  pause = (20 + 20 * attempt) if c == "429" else (15 + 10 * attempt)
                   log("  попытка %d/%d не удалась (%s), ждём %d с" % (attempt + 1, tries, why, pause))
                   time.sleep(pause)
               raise RuntimeError("%s %s" % (why, url[:80]))
