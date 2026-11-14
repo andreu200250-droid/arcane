@@ -14,6 +14,11 @@ on:
   push:
     branches: [main, master]
   workflow_dispatch:
+    inputs:
+      force:
+        description: "Просканировать сейчас, не ожидая отдыха Steam"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -34,9 +39,11 @@ jobs:
 
       - name: Скан Steam и сборка страницы
         shell: bash
+        env:
+          FORCE: ${{ github.event.inputs.force }}
         run: |
           python3 - <<'PY'
-          import subprocess, re, json, time, pathlib
+          import os, subprocess, re, json, time, pathlib
           from urllib.parse import quote
 
           UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -77,11 +84,54 @@ jobs:
               time.sleep(max(0.0, min(sec, left)))
 
 
+          # Когда Steam перестаёт пускать к страницам лотов, наши же повторы только
+          # продлевают блокировку: каждая попытка снова упирается в отказ. Поэтому
+          # после отказа скан не делается, пока не истечёт пауза, а пауза растёт:
+          # 5, 10, 20, 30 минут. Как только Steam снова пускает — скан идёт как обычно.
+          STATE = pathlib.Path("scan-state.json")
+          FORCE = str(os.environ.get("FORCE", "")).lower() in ("true", "1")
+          COOLDOWN_MAX = 30 * 60      # дальше 30 минут не отступаем
+          PROBE_LIMIT = 4             # столько отказов подряд — и скан остановлен
+          BLOCK = [0.0]               # Steam сердится: до этого времени не просим ничего
+          STOP = [False]              # Steam не пускает: дальше просить бессмысленно
+          PROBE = [0]                 # отказов подряд на страницах лотов
+
+
+          def load_state():
+              try:
+                  d = json.loads(STATE.read_text(encoding="utf-8"))
+                  return int(d.get("fails") or 0), float(d.get("at") or 0.0)
+              except Exception:
+                  return 0, 0.0
+
+
+          def save_state(fails):
+              try:
+                  STATE.write_text(json.dumps({"fails": int(fails), "at": time.time()}),
+                                   encoding="utf-8")
+              except Exception:
+                  pass
+
+
+          def cooldown(fails):
+              """Сколько ждать после отказа: 5, 10, 20, 30 минут."""
+              if fails <= 0:
+                  return 0.0
+              return float(min(COOLDOWN_MAX, 5 * 60 * 2 ** (min(fails, 5) - 1)))
+
+
           def get(url, tries=4, want=None):
               code, why = "", "нет ответа"
+              lots = "/market/listings/" in url
               for attempt in range(tries):
                   if time.time() > DEADLINE[0]:
                       raise RuntimeError("время скана вышло")
+                  if lots and STOP[0]:
+                      raise RuntimeError("Steam не пускает к страницам лотов")
+                  # Steam сердится: до этого времени не просим ничего, иначе серия
+                  # отказов только продлевает блокировку
+                  if BLOCK[0] > time.time():
+                      nap(BLOCK[0] - time.time())
                   wait = THROTTLE - (time.time() - _last[0])
                   if wait > 0:
                       time.sleep(wait)
@@ -99,12 +149,22 @@ jobs:
                           log("  %s — повтор %d/%d" % (why, attempt + 1, tries))
                           nap(20 + 15 * attempt)   # 20, 35, 50, 65 с
                           continue
+                      if lots:
+                          PROBE[0] = 0        # пустили — дальше обычные повторы
                       return body
                   why = "HTTP %s" % (c or "нет ответа")
-                  # 429 от Steam держится дольше минуты, но ждём на одном адресе
-                  # не больше ~3 минут: иначе серия отказов съедает весь лимит скана
-                  # и прогон падает целиком вместо того, чтобы отдать хоть часть данных
+                  # 429 от Steam: не просим ничего, пока блокировка не отпустит, и
+                  # считаем отказы подряд. Четыре подряд на страницах лотов — значит,
+                  # Steam не пускает нас вообще: скан останавливается, потому что
+                  # продолжать бессмысленно, а повторы продлевают блокировку
                   pause = (20 + 20 * attempt) if c == "429" else (15 + 10 * attempt)
+                  if c == "429":
+                      BLOCK[0] = time.time() + pause
+                      if lots:
+                          PROBE[0] += 1
+                          if PROBE[0] >= PROBE_LIMIT:
+                              STOP[0] = True
+                              log("  Steam не пускает к страницам лотов — скан остановлен")
                   # после последней попытки спать незачем: сразу отдаём отказ наверх,
                   # иначе мёртвый адрес съедает лимит скана ни за чем
                   log("  попытка %d/%d не удалась (%s)%s"
@@ -166,6 +226,9 @@ jobs:
                   log("  страница пустая при total_count=%d — повтор" % total)
                   nap(10)
               for start in range(PAGE, total, PAGE):
+                  if STOP[0]:
+                      log("  Steam не пускает — остальные страницы не прошу")
+                      break
                   if time.time() > DEADLINE[0]:
                       log("  время скана вышло — остальные страницы пропускаю")
                       break
@@ -266,11 +329,20 @@ jobs:
 
 
           def main():
+              fails, last_at = load_state()
+              wait = cooldown(fails) - (time.time() - last_at)
+              if wait > 0 and not FORCE:
+                  log("Steam не пускает к страницам лотов с %s — следующая попытка через %d мин, "
+                      "скан пропускаем (сайт остаётся на прошлом снимке)"
+                      % (time.strftime("%d.%m %H:%M UTC", time.gmtime(last_at)), round(wait / 60.0)))
+                  return
               DEADLINE[0] = time.time() + SCAN_LIMIT
               print("scan: gems")
               g = gems()
               deals, base = [], {}
               for hero, name, default_gem in ARC:
+                  if STOP[0]:
+                      break
                   print("scan:", hero)
                   lots = []
                   # сначала базовая версия: её данные уже стоят на сайте, её терять нельзя
@@ -289,6 +361,9 @@ jobs:
                       print("  версии %s не нашлись: %s" % (name, e))
                       vlist = []
                   for vname in vlist:
+                      if STOP[0]:
+                          log("  Steam не пускает — остальные версии не прошу")
+                          break
                       if time.time() > DEADLINE[0]:
                           log("  время скана вышло — остальные версии пропускаю")
                           break
@@ -331,6 +406,7 @@ jobs:
                   # остаётся зелёным — следующий диспатч через 10 минут попробует снова
                   log("СБОЙ: Steam не отдал ни одного лота с гемом — "
                       "оставлен прошлый снимок сайта, прогон не роняем")
+                  save_state(fails + 1)   # следующая попытка — не сразу, а после паузы
                   return
               deals.sort(key=lambda d: -d["save"])
 
@@ -383,6 +459,7 @@ jobs:
               out = pathlib.Path("public")
               out.mkdir(exist_ok=True)
               (out / "index.html").write_text(page, encoding="utf-8")
+              save_state(0)          # скан удался — пауза между попытками сбрасывается
               print("public/index.html: %d лотов с гемом" % len(deals))
 
 
@@ -497,17 +574,24 @@ jobs:
       - name: Опубликовать страницу в ветку main
         if: always()
         run: |
-          if [ ! -f public/index.html ]; then
-            echo "скан не собрал страницу — нечего публиковать"
+          if [ ! -f public/index.html ] && [ ! -f scan-state.json ]; then
+            echo "скан не собрал ни страницу, ни состояние — нечего публиковать"
             exit 0
           fi
-          cp public/index.html index.html
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add index.html
+          if [ -f public/index.html ]; then
+            cp public/index.html index.html
+            git add index.html
+          fi
+          # состояние скана (пауза после отказа Steam) публикуем всегда —
+          # иначе следующий прогон не узнает, что Steam не пускает
+          if [ -f scan-state.json ]; then
+            git add scan-state.json
+          fi
           git rm -q --cached scan.log 2>/dev/null || true
           if git diff --cached --quiet; then
-            echo "index.html не изменился"
+            echo "снимок и состояние не изменились"
           else
             git commit -q -m "Дашборд: снимок рынка [skip ci]"
             git push origin HEAD:main
