@@ -122,6 +122,12 @@ jobs:
               return out
 
 
+          def page_stat(body):
+              """Сколько в ответе Steam сырых лотов и распознанных — для журнала скана."""
+              return "%d КБ, listingid x%d, strSubtotal x%d" % (
+                  len(body) // 1024, body.count("listingid"), body.count("strSubtotal"))
+
+
           def listings(name):
               # Steam отдаёт лоты на обычной странице рынка: /render/ больше не отдаёт их все.
               # Запрос count=100 отдаёт сразу 100 лотов, поэтому на версию арканы уходит
@@ -134,10 +140,11 @@ jobs:
                   m = re.search(r'total_count[^0-9]{1,8}(\d{1,7})', first)
                   total = int(m.group(1)) if m else 0
                   rows = parse_page(first)
+                  log("  %s: страница 0 — %s, всего лотов %d" % (name, page_stat(first), total))
                   # Steam сказал, что лоты есть, а страница пустая — берём её ещё раз
                   if rows or not total or attempt:
                       break
-                  print("  страница пустая при total_count=%d — повтор" % total)
+                  log("  страница пустая при total_count=%d — повтор" % total)
                   time.sleep(10)
               for start in range(PAGE, total, PAGE):
                   if time.time() > DEADLINE[0]:
@@ -148,17 +155,19 @@ jobs:
                       try:
                           body = get(base + "?start=%d&count=%d" % (start, PAGE), want="listingid")
                           chunk = parse_page(body)
+                          log("  %s: страница %d — %s, разобрано %d" % (name, start, page_stat(body), len(chunk)))
                           if len(chunk) >= min(PAGE, total - start):
                               break
-                          print("  страница start=%d короткая (%d из %d лотов) — повтор"
-                                % (start, len(chunk), min(PAGE, total - start)))
+                          log("  страница start=%d короткая (%d из %d лотов) — повтор"
+                              % (start, len(chunk), min(PAGE, total - start)))
                       except RuntimeError as e:
-                          print("  start=%d: %s" % (start, e))
+                          log("  start=%d: %s" % (start, e))
                       time.sleep(10)
                   if not chunk:
-                      print("  страница start=%d так и не отдалась — дальше не иду" % start)
+                      log("  страница start=%d так и не отдалась — дальше не иду" % start)
                       break
                   rows += chunk
+              log("  %s: разобрано %d лотов, с самоцветом %d" % (name, len(rows), sum(1 for r in rows if r["gem"])))
               seen, uniq = set(), []
               for i, r in enumerate(rows):
                   k = (r["price"], r["gem"])
@@ -264,11 +273,11 @@ jobs:
                       if time.time() > DEADLINE[0]:
                           log("  время скана вышло — остальные версии пропускаю")
                           break
-                      print("  версия:", vname)
+                      log("  версия: %s" % vname)
                       try:
                           got = listings(vname)
                       except Exception as e:
-                          print("  скан %s не удался: %s" % (vname, e))
+                          log("  скан %s не удался: %s" % (vname, e))
                           continue
                       for l in got:
                           l["ver"] = vname
