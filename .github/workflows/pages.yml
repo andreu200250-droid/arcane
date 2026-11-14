@@ -130,10 +130,10 @@ jobs:
 
           def listings(name):
               # Steam отдаёт лоты на обычной странице рынка: /render/ больше не отдаёт их все.
-              # Запрос count=100 отдаёт сразу 100 лотов, поэтому на версию арканы уходит
-              # 1-4 запроса вместо 18 — скан версий укладывается в минуты.
+              # Count=100 не помогает: в разметке остаются только первые 20 лотов страницы,
+              # поэтому листание по 20 — так проверенная версия и собирала все лоты.
               base = "https://steamcommunity.com/market/listings/570/" + quote(name)
-              PAGE = 100
+              PAGE = 20
               total, rows = 0, []
               for attempt in range(2):
                   first = get(base + "?start=0&count=%d" % PAGE, want="listingid")
