@@ -65,7 +65,7 @@ jobs:
           DEADLINE = [1e18]
 
 
-          def get(url, tries=5, want=None):
+          def get(url, tries=4, want=None):
               code, why = "", "нет ответа"
               for attempt in range(tries):
                   if time.time() > DEADLINE[0]:
@@ -89,8 +89,10 @@ jobs:
                           continue
                       return body
                   why = "HTTP %s" % (c or "нет ответа")
-                  # 429 от Steam держится дольше минуты — для него пауза длиннее
-                  pause = (25 + 15 * attempt) if c == "429" else (15 + 10 * attempt)
+                  # 429 от Steam держится дольше минуты, но ждём на одном адресе
+                  # не больше ~3 минут: иначе серия отказов съедает весь лимит скана
+                  # и прогон падает целиком вместо того, чтобы отдать хоть часть данных
+                  pause = (30 + 30 * attempt) if c == "429" else (15 + 10 * attempt)
                   log("  попытка %d/%d не удалась (%s), ждём %d с" % (attempt + 1, tries, why, pause))
                   time.sleep(pause)
               raise RuntimeError("%s %s" % (why, url[:80]))
@@ -282,6 +284,8 @@ jobs:
                       for l in got:
                           l["ver"] = vname
                       lots += got
+                  log("  %s: версий просканировано %d, лотов %d, с самоцветом %d"
+                      % (hero, len(vlist) + 1, len(lots), sum(1 for l in lots if l["gem"])))
                   if not lots:
                       print("  лотов нет — аркана пропущена")
                       continue
@@ -306,7 +310,11 @@ jobs:
                                     "pct": 100.0 * (setp - l["price"]) / setp,
                                     "def": l["gem"] == default_gem, "url": l["url"]})
               if not deals:
-                  raise SystemExit("Steam не отдал ни одного лота с гемом")
+                  # Публиковать нечего: сайт остаётся на прошлом снимке, а прогон
+                  # остаётся зелёным — следующий диспатч через 10 минут попробует снова
+                  log("СБОЙ: Steam не отдал ни одного лота с гемом — "
+                      "оставлен прошлый снимок сайта, прогон не роняем")
+                  return
               deals.sort(key=lambda d: -d["save"])
 
               live = [d for d in deals if not d["def"]]
