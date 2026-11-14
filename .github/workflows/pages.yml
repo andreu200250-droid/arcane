@@ -42,12 +42,16 @@ jobs:
           UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                 "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
           RATE = 82.57            # ₽ за $1 (курс Steam, срез 10.11.2026)
-          ARC = [("Terrorblade", "Fractal Horns of Inner Abysm", "Reflection's Shade"),
-                 ("Techies", "Swine of the Sunken Galley", "Explosive Burst")]
+          # Сканируем только аркану Terrorblade. Аркана Techies (Swine of the Sunken
+          # Galley) убрана: лотов с самоцветом на ней не находится (0 ₽ в шапке сайта),
+          # а сканы её версий съедали время всего прогона — из-за этого сканал успевал
+          # меньше данных, чем мог бы.
+          ARC = [("Terrorblade", "Fractal Horns of Inner Abysm", "Reflection's Shade")]
           _last = [0.0]
           THROTTLE = 3.0          # пауза между запросами к Steam, сек
           SCAN_LIMIT = 330        # максимум на весь скан, сек (диспатч каждые 10 минут:
-                                   # здоровый скан идёт ~3.5 мин, остальное — запас на повторы)
+                                   # здоровый скан одной арканы идёт ~1.5 мин,
+                                   # остальное — запас на повторы при 429)
           LOG = []
 
 
@@ -64,6 +68,13 @@ jobs:
 
 
           DEADLINE = [1e18]
+
+
+          def nap(sec):
+              """Пауза, которая не переходит за дедлайн скана: когда время вышло,
+              спать незачем — сразу отдаём отказ и переходим к следующему адресу."""
+              left = DEADLINE[0] - time.time()
+              time.sleep(max(0.0, min(sec, left)))
 
 
           def get(url, tries=4, want=None):
@@ -86,7 +97,7 @@ jobs:
                       if want and want not in body:
                           why = "страница без данных (%s)" % want
                           log("  %s — повтор %d/%d" % (why, attempt + 1, tries))
-                          time.sleep(20 + 15 * attempt)   # 20, 35, 50, 65 с
+                          nap(20 + 15 * attempt)   # 20, 35, 50, 65 с
                           continue
                       return body
                   why = "HTTP %s" % (c or "нет ответа")
@@ -95,7 +106,10 @@ jobs:
                   # и прогон падает целиком вместо того, чтобы отдать хоть часть данных
                   pause = (20 + 20 * attempt) if c == "429" else (15 + 10 * attempt)
                   log("  попытка %d/%d не удалась (%s), ждём %d с" % (attempt + 1, tries, why, pause))
-                  time.sleep(pause)
+                  # после последней попытки спать незачем: сразу отдаём отказ наверх,
+                  # иначе мёртвый адрес съедает лимит скана ни за чем
+                  if attempt + 1 < tries:
+                      nap(pause)
               raise RuntimeError("%s %s" % (why, url[:80]))
 
 
@@ -148,7 +162,7 @@ jobs:
                   if rows or not total or attempt:
                       break
                   log("  страница пустая при total_count=%d — повтор" % total)
-                  time.sleep(10)
+                  nap(10)
               for start in range(PAGE, total, PAGE):
                   if time.time() > DEADLINE[0]:
                       log("  время скана вышло — остальные страницы пропускаю")
@@ -165,7 +179,7 @@ jobs:
                               % (start, len(chunk), min(PAGE, total - start)))
                       except RuntimeError as e:
                           log("  start=%d: %s" % (start, e))
-                      time.sleep(10)
+                      nap(10)
                   if not chunk:
                       log("  страница start=%d так и не отдалась — дальше не иду" % start)
                       break
@@ -189,8 +203,8 @@ jobs:
 
           def variants(name):
               """Все версии одной и той же арканы: базовая, Exalted, Inscribed, Corrupted,
-              Autographed, Auspicious... Версия — предмет того же типа (Arcana Demon Horns,
-              Arcana Swine Cannon), поэтому «- Horns», «- Bundle» и прочие отдельные
+              Autographed, Auspicious... Версия — предмет того же типа (Arcana Demon Horns),
+              поэтому «- Horns», «- Bundle» и прочие отдельные
               предметы с похожим названием сюда не попадают."""
               out, start, page, itype = [], 0, 0, ""
               while start < 60 and page < 6:
@@ -353,7 +367,8 @@ jobs:
                   return rub(p) + v
 
 
-              stamp = time.strftime("%d.%m.%Y %H:%M UTC", time.gmtime())
+              # Екатеринбург: UTC+5, перехода на летнее время в городе нет
+              stamp = time.strftime("%d.%m.%Y %H:%M ЕКБ", time.gmtime(time.time() + 5 * 3600))
               page = (TEMPLATE
                       .replace("%%CARDS%%", card(best, "максимальная выгода в рублях") +
                                card(pct, "лучший процент", "c2") +
@@ -362,7 +377,6 @@ jobs:
                       .replace("%%STAMP%%", stamp)
                       .replace("%%COUNT%%", str(len(deals)))
                       .replace("%%TB%%", cheap_line("Terrorblade"))
-                      .replace("%%TE%%", cheap_line("Techies"))
                       .replace("%%GEMS%%", str(len(g))))
               out = pathlib.Path("public")
               out.mkdir(exist_ok=True)
@@ -427,7 +441,7 @@ jobs:
           </style></head><body><div class="wrap">
           <h1>Dota 2: аркана с самоцветом &mdash; где выгода</h1>
           <p class="sub">Снимок Steam Community Market: %%STAMP%% &middot; лотов с гемом: %%COUNT%% &middot;
-          гемов: %%GEMS%% &middot; дешёвая аркана: Terrorblade %%TB%%, Techies %%TE%%.
+          гемов: %%GEMS%% &middot; дешёвая аркана: Terrorblade %%TB%%.
           Обновляется автоматически по расписанию GitHub Actions.</p>
           <div class="cards">%%CARDS%%</div>
           <div class="bar">
@@ -444,11 +458,11 @@ jobs:
           <div class="foot">
           <b>Как считается.</b> Выгода = (самый дешёвый лот арканы + самый дешёвый лот этого гема на Steam)
           &minus; цена готового лота. Процент &mdash; скидка к сборке того же вида.<br>
-          Прайзматический сокет есть только у двух аркан: Terrorblade (Fractal Horns of Inner Abysm) и
-          Techies (Swine of the Sunken Galley). В остальные арканы гем не вставить.<br>
+          Прайзматический сокет есть только у одной арканы &mdash; Terrorblade
+          (Fractal Horns of Inner Abysm). В остальные арканы гем не вставить.<br>
           <b>Важно:</b> при замене гема старый уничтожается, а Steam берёт 15% при продаже &mdash; это экономия
           на сборке, а не арбитраж. Лоты уникальны: конкретный лот с нужным гемом уйдёт.<br>
-          Дефолтные гемы (Terrorblade &mdash; Reflection's Shade, Techies &mdash; Explosive Burst) в таблицу не попадают:
+          Дефолтный гем (Terrorblade &mdash; Reflection's Shade) в таблицу не попадает:
           это штатная комплектация, а не апгрейд. Полная версия с фильтрами, историей цен и CSV &mdash;
           Docker-образ из того же проекта.
           </div></div>
