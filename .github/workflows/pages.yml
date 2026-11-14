@@ -546,7 +546,7 @@ jobs:
               else:
                   cards = (card(best, "максимальная выгода в рублях")
                            + card(pct, "лучший процент", "c2")
-                           + card(cheap, "самый дешёвый вход (&ge;15%%)" if rich
+                           + card(cheap, "самый дешёвый вход (&ge;15%)" if rich
                                   else "самый дешёвый вход", "c3"))
 
               def table_basis(d):
