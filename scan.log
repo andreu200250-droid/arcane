@@ -1,0 +1,107 @@
+прогон с адреса 172.203.213.85
+  GET ps://steamcommunity.com/market/search/render/ -> 200
+  GET ps://steamcommunity.com/market/search/render/ -> 200
+  GET ps://steamcommunity.com/market/search/render/ -> 200
+  GET ps://steamcommunity.com/market/search/render/ -> 200
+  GET ps://steamcommunity.com/market/search/render/ -> 200
+  GET ps://steamcommunity.com/market/search/render/ -> 200
+  GET ps://steamcommunity.com/market/search/render/ -> 200
+  GET ings/570/Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Fractal Horns of Inner Abysm: страница 0 — 725 КБ, listingid x20, strSubtotal x20, всего лотов 355
+  GET ings/570/Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Fractal Horns of Inner Abysm: страница 20 — 725 КБ, listingid x20, strSubtotal x20, разобрано 20
+  GET ings/570/Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Fractal Horns of Inner Abysm: страница 40 — 723 КБ, listingid x20, strSubtotal x20, разобрано 20
+  GET ings/570/Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Fractal Horns of Inner Abysm: страница 60 — 722 КБ, listingid x20, strSubtotal x20, разобрано 20
+  GET ings/570/Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Fractal Horns of Inner Abysm: страница 80 — 724 КБ, listingid x20, strSubtotal x20, разобрано 20
+  GET ings/570/Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Fractal Horns of Inner Abysm: страница 100 — 727 КБ, listingid x20, strSubtotal x20, разобрано 20
+  GET ings/570/Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Fractal Horns of Inner Abysm: страница 120 — 729 КБ, listingid x20, strSubtotal x20, разобрано 20
+  GET ings/570/Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Fractal Horns of Inner Abysm: страница 140 — 733 КБ, listingid x20, strSubtotal x20, разобрано 20
+  GET ings/570/Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Fractal Horns of Inner Abysm: страница 160 — 726 КБ, listingid x20, strSubtotal x20, разобрано 20
+  GET ings/570/Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Fractal Horns of Inner Abysm: страница 180 — 738 КБ, listingid x20, strSubtotal x20, разобрано 20
+  GET ings/570/Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Fractal Horns of Inner Abysm: страница 200 — 738 КБ, listingid x20, strSubtotal x20, разобрано 20
+  GET ings/570/Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Fractal Horns of Inner Abysm: страница 220 — 740 КБ, listingid x20, strSubtotal x20, разобрано 20
+  GET ings/570/Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Fractal Horns of Inner Abysm: страница 240 — 731 КБ, listingid x20, strSubtotal x20, разобрано 20
+  GET ings/570/Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Fractal Horns of Inner Abysm: страница 260 — 730 КБ, listingid x20, strSubtotal x20, разобрано 20
+  GET ings/570/Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Fractal Horns of Inner Abysm: страница 280 — 739 КБ, listingid x20, strSubtotal x20, разобрано 20
+  GET ings/570/Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Fractal Horns of Inner Abysm: страница 300 — 734 КБ, listingid x20, strSubtotal x20, разобрано 20
+  GET ings/570/Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Fractal Horns of Inner Abysm: страница 320 — 729 КБ, listingid x20, strSubtotal x20, разобрано 20
+  GET ings/570/Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Fractal Horns of Inner Abysm: страница 340 — 700 КБ, listingid x15, strSubtotal x15, разобрано 15
+  Fractal Horns of Inner Abysm: разобрано 355 лотов, с самоцветом 355
+  GET ps://steamcommunity.com/market/search/render/ -> 200
+  GET ps://steamcommunity.com/market/search/render/ -> 200
+  версия: Auspicious Fractal Horns of Inner Abysm
+  GET icious%20Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Auspicious Fractal Horns of Inner Abysm: страница 0 — 224 КБ, listingid x1, strSubtotal x1, всего лотов 1
+  Auspicious Fractal Horns of Inner Abysm: разобрано 1 лотов, с самоцветом 1
+  версия: Corrupted Fractal Horns of Inner Abysm
+  GET rupted%20Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Corrupted Fractal Horns of Inner Abysm: страница 0 — 614 КБ, listingid x19, strSubtotal x19, всего лотов 19
+  Corrupted Fractal Horns of Inner Abysm: разобрано 19 лотов, с самоцветом 19
+  версия: Autographed Fractal Horns of Inner Abysm
+  GET raphed%20Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Autographed Fractal Horns of Inner Abysm: страница 0 — 667 КБ, listingid x20, strSubtotal x20, всего лотов 48
+  GET raphed%20Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Autographed Fractal Horns of Inner Abysm: страница 20 — 666 КБ, listingid x20, strSubtotal x20, разобрано 20
+  GET raphed%20Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Autographed Fractal Horns of Inner Abysm: страница 40 — 576 КБ, listingid x8, strSubtotal x8, разобрано 8
+  Autographed Fractal Horns of Inner Abysm: разобрано 48 лотов, с самоцветом 48
+  версия: Inscribed Fractal Horns of Inner Abysm
+  GET cribed%20Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Inscribed Fractal Horns of Inner Abysm: страница 0 — 711 КБ, listingid x20, strSubtotal x20, всего лотов 92
+  GET cribed%20Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Inscribed Fractal Horns of Inner Abysm: страница 20 — 712 КБ, listingid x20, strSubtotal x20, разобрано 20
+  GET cribed%20Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Inscribed Fractal Horns of Inner Abysm: страница 40 — 730 КБ, listingid x20, strSubtotal x20, разобрано 20
+  GET cribed%20Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Inscribed Fractal Horns of Inner Abysm: страница 60 — 727 КБ, listingid x20, strSubtotal x20, разобрано 20
+  GET cribed%20Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Inscribed Fractal Horns of Inner Abysm: страница 80 — 663 КБ, listingid x12, strSubtotal x12, разобрано 12
+  Inscribed Fractal Horns of Inner Abysm: разобрано 92 лотов, с самоцветом 92
+  версия: Exalted Fractal Horns of Inner Abysm
+  GET xalted%20Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Exalted Fractal Horns of Inner Abysm: страница 0 — 689 КБ, listingid x20, strSubtotal x20, всего лотов 75
+  GET xalted%20Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Exalted Fractal Horns of Inner Abysm: страница 20 — 681 КБ, listingid x20, strSubtotal x20, разобрано 20
+  GET xalted%20Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Exalted Fractal Horns of Inner Abysm: страница 40 — 680 КБ, listingid x20, strSubtotal x20, разобрано 20
+  GET xalted%20Fractal%20Horns%20of%20Inner%20Abysm -> 200
+  Exalted Fractal Horns of Inner Abysm: страница 60 — 636 КБ, listingid x15, strSubtotal x15, разобрано 15
+  Exalted Fractal Horns of Inner Abysm: разобрано 75 лотов, с самоцветом 75
+  Terrorblade: версий просканировано 6, лотов 506, с самоцветом 506
+  GET ps://steamcommunity.com/market/priceoverview/ -> 200
+  Verdant Green: продажа 7 105 ₽ (объём 1)
+  GET ps://steamcommunity.com/market/priceoverview/ -> 429
+  попытка 1/2 не удалась (HTTP 429), ждём 20 с
+  GET ps://steamcommunity.com/market/priceoverview/ -> 429
+  попытка 2/2 не удалась (HTTP 429) — сдаёмся
+  продажи Blue: HTTP 429 https://steamcommunity.com/market/priceoverview/?appid=570&market_hash_name=Pris
+  Blue: свежих продаж нет — цена по последней зафиксированной (21.11.2026)
+  GET ps://steamcommunity.com/market/priceoverview/ -> 429
+  попытка 1/2 не удалась (HTTP 429), ждём 20 с
+  GET ps://steamcommunity.com/market/priceoverview/ -> 429
+  попытка 2/2 не удалась (HTTP 429) — сдаёмся
+  продажи Cursed Black: HTTP 429 https://steamcommunity.com/market/priceoverview/?appid=570&market_hash_name=Pris
+  Cursed Black: свежих продаж нет — цена по последней зафиксированной (21.11.2026)
+  GET ps://steamcommunity.com/market/priceoverview/ -> 429
+  попытка 1/2 не удалась (HTTP 429), ждём 20 с
+  GET ps://steamcommunity.com/market/priceoverview/ -> 429
+  попытка 2/2 не удалась (HTTP 429) — сдаёмся
+  продажи Summer Warmth: HTTP 429 https://steamcommunity.com/market/priceoverview/?appid=570&market_hash_name=Pris
+  Summer Warmth: продаж нет — цена по предложению (2 лот(ов))
+  Steam не пускает к ценам продаж — дальше из кеша или предложения
