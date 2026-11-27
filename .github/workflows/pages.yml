@@ -44,8 +44,8 @@ jobs:
           RUN_IP="$(curl -s --max-time 10 https://api.ipify.org || echo неизвестно)"
           export RUN_IP
           python3 - <<'PY'
-          import os, subprocess, re, json, time, pathlib
-          from urllib.parse import quote
+          import os, subprocess, re, json, time, pathlib, html
+          from urllib.parse import quote, unquote
 
           UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
                 "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
@@ -198,11 +198,21 @@ jobs:
               PAGE = 20
               total, rows = 0, []
               for attempt in range(2):
-                  first = get(base + "?start=0&count=%d" % PAGE, want="listingid")
+                  # currency=1 — иначе Steam отдаёт цены в валюте по адресу прогона
+                  # (у GitHub Actions бывает канадский доллар), и разбор молча
+                  # теряет все лоты: цена перестаёт начинаться с «$»
+                  first = get(base + "?start=0&count=%d&currency=1" % PAGE, want="listingid")
                   m = re.search(r'total_count[^0-9]{1,8}(\d{1,7})', first)
                   total = int(m.group(1)) if m else 0
                   rows = parse_page(first)
                   log("  %s: страница 0 — %s, всего лотов %d" % (name, page_stat(first), total))
+                  # цена лота разбирается только если она в долларах: если Steam
+                  # отдал валюту по адресу прогона, в журнане будет видно почему
+                  for cur in ("CA$", "A$", "NZ$", "S$", "R$", "£", "€", "¥"):
+                      if cur in first:
+                          log("  %s: цена пришла не в долларах (%s) — лоты не разобрать"
+                              % (name, cur))
+                          break
                   # Steam сказал, что лоты есть, а страница пустая — берём её ещё раз
                   if rows or not total or attempt:
                       break
@@ -218,7 +228,8 @@ jobs:
                   chunk = []
                   for attempt in range(2):
                       try:
-                          body = get(base + "?start=%d&count=%d" % (start, PAGE), want="listingid")
+                          body = get(base + "?start=%d&count=%d&currency=1" % (start, PAGE),
+                                   want="listingid")
                           chunk = parse_page(body)
                           log("  %s: страница %d — %s, разобрано %d" % (name, start, page_stat(body), len(chunk)))
                           if len(chunk) >= min(PAGE, total - start):
@@ -249,37 +260,127 @@ jobs:
               return uniq
 
 
+          def search_items(q):
+              """Товары рынка по слову — со страницы поиска. Раньше это отдавал
+              /search/render/ JSON'ом, но Steam его убрал и страницу поиска
+              переделал: классы в её разметке хешированы и меняются с каждым
+              деплоем, поэтому опираемся только на текст. Имя товара — из ссылки
+              на его лот, тип — из первой подписи карточки, число заявок и цена —
+              из подписей «Quantity for sale» и «From $». currency=1 — иначе Steam
+              отдаст цены в валюте по адресу прогона, а не в долларах."""
+              url = ("https://steamcommunity.com/market/search?q=%s&appid=570&currency=1"
+                     % quote(q))
+              body = get(url, tries=2, want="Quantity for sale")
+              out = []
+              # каждая карточка товара — ссылка на его лот; всё до следующей
+              # ссылки принадлежит этой карточке
+              for chunk in re.split(r'<a href="https://steamcommunity\.com/market/listings/570/',
+                                    body)[1:]:
+                  href = chunk.split('"', 1)[0]
+                  m_qty = re.search(r'Quantity for sale:\s*<span[^>]*>\s*([\d,]+)\s*</span>', chunk)
+                  m_price = re.search(r'From \$([\d,]+(?:\.\d+)?)', chunk)
+                  if not (m_qty and m_price):
+                      continue        # не карточка товара, а ссылка из другого места
+                  m_type = re.search(r'<span[^>]*>([^<]{2,60})</span>', chunk)
+                  out.append({"name": unquote(html.unescape(href)),
+                              "type": (m_type.group(1).strip() if m_type else ""),
+                              "n": int(m_qty.group(1).replace(",", "")),
+                              "ask": float(m_price.group(1).replace(",", ""))})
+              return out
+
+
+          def gems():
+              """Цены гемов: самая дешёвая заявка и число лотов — со страницы поиска."""
+              out = {}
+              try:
+                  items = search_items("prismatic")
+              except Exception as e:
+                  # Поиск не отдался: цены гемов добудем из priceoverview по ходу
+                  # скана (ask_price), снимок при этом всё равно соберётся
+                  log("  поиск гемов не отдался: %s — заявки возьму из priceoverview" % e)
+                  return out
+              for it in items:
+                  n = it["name"]
+                  if n.startswith("Prismatic: "):
+                      out[n[11:]] = {"ask": it["ask"], "n": it["n"]}
+              if not out:
+                  # Поиск ответил, но самоцветов в нём нет — цены всё равно
+                  # добудем из priceoverview по ходу скана
+                  log("  поиск гемов не отдал ни одного самоцвета — "
+                      "заявки возьму из priceoverview")
+              return out
+
+
           def variants(name):
               """Все версии одной и той же арканы: базовая, Exalted, Inscribed, Corrupted,
               Autographed, Auspicious... Версия — предмет того же типа (Arcana Demon Horns),
               поэтому «- Horns», «- Bundle» и прочие отдельные
               предметы с похожим названием сюда не попадают."""
-              out, start, page, itype = [], 0, 0, ""
-              while start < 60 and page < 6:
-                  d = json.loads(get("https://steamcommunity.com/market/search/render/?query=%s"
-                                     "&appid=570&norender=1&count=10&start=%d&currency=1"
-                                     % (quote(name), start), want='"success"'))
-                  res = d.get("results") or []
-                  for r in res:              # тип предмета узнаём по базовой версии
-                      if (r.get("hash_name") or "") == name:
-                          itype = (r.get("asset_description") or {}).get("type") or itype
-                  found = 0
-                  if itype:
-                      for r in res:
-                          h = r.get("hash_name") or ""
-                          if name not in h or h in out:
-                              continue
-                          if ((r.get("asset_description") or {}).get("type") or "") == itype:
-                              out.append(h)
-                              found += 1
-                  start += 10
-                  page += 1
-                  if not res or start >= (d.get("searchdata", {}).get("total_count") or 0):
-                      break
-                  if not found:              # дальше только чужие предметы
-                      break
+              out = []
+              try:
+                  items = search_items(name)
+              except Exception as e:
+                  # Поиск не отдался: версии проверим напрямую (probe_variants)
+                  log("  версии %s через поиск не нашлись: %s" % (name, e))
+                  return [name]
+              base_type = next((i["type"] for i in items if i["name"] == name), "")
+              for it in items:
+                  h = it["name"]
+                  if h == name:
+                      out.append(h)
+                  # версия — то же название с одним словом впереди и без отдельной
+                  # детали (« - Horns», « - Bundle»): «Fractal Horns - Horns» не версия
+                  elif (name in h and " - " not in h and h not in out
+                        and re.match(r"^[A-Z][A-Za-z']* %s$" % re.escape(name), h)
+                        and (not base_type or it["type"] == base_type)):
+                      out.append(h)
               if name not in out:             # поиск не отдал базовую — сканируем только её
                   out = [name]
+              return out
+
+
+          def overview(name):
+              """priceoverview по гему: цена продажи (медиана и объём) и самая
+              дешёвая заявка. Отдаёт None, если Steam не ответил."""
+              url = ("https://steamcommunity.com/market/priceoverview/?appid=570"
+                     "&market_hash_name=%s&currency=1" % quote("Prismatic: " + name))
+              try:
+                  d = json.loads(get(url, tries=2, want='"success":true', gap=SALE_GAP))
+                  if not d.get("lowest_price") and not d.get("median_price"):
+                      return None           # такого гема на рынке нет
+                  return {"low": d.get("lowest_price") or "",
+                          "vol": int(str(d.get("volume") or "0").replace(",", "") or 0),
+                          "med": d.get("median_price") or ""}
+              except Exception as e:
+                  log("  заявка %s: %s" % (name, e))
+                  return None
+
+
+          def ask_price(name):
+              """Самая дешёвая заявка гема — запас на случай, когда страница поиска
+              не отдалась: цена гема нужна и тогда, когда продаж в окне нет."""
+              o = overview(name)
+              low = (o["low"] if o else "").replace("$", "").replace(",", "")
+              return float(low) if low else None
+
+
+          def probe_variants(name):
+              """Запас: страница поиска не отдалась — проверяем известные префиксы
+              версий арканы через priceoverview (лёгкий JSON). Версия есть на рынке —
+              сканируем её лоты, иначе пропускаем."""
+              out = []
+              for p in ("Exalted", "Inscribed", "Corrupted", "Autographed", "Auspicious",
+                        "Genuine"):
+                  v = "%s %s" % (p, name)
+                  url = ("https://steamcommunity.com/market/priceoverview/?appid=570"
+                         "&market_hash_name=%s&currency=1" % quote(v))
+                  try:
+                      d = json.loads(get(url, tries=1, want='"success":true', gap=SALE_GAP))
+                  except Exception:
+                      continue
+                  if d.get("lowest_price") or d.get("median_price"):
+                      out.append(v)
+                      log("  версия на рынке: %s" % v)
               return out
 
 
@@ -288,30 +389,6 @@ jobs:
               if not vname or vname == name:
                   return ""
               return " · " + vname[:len(vname) - len(name)].strip(" -")
-
-
-          def gems():
-              out, start, page = {}, 0, 0
-              while start < 200 and page < 12 and time.time() <= DEADLINE[0]:
-                  try:
-                      d = json.loads(get("https://steamcommunity.com/market/search/render/?query=prismatic"
-                                         "&appid=570&norender=1&count=10&start=%d&currency=1" % start,
-                                         want='"success"'))
-                  except Exception as e:
-                      # Steam может не пустить и к ценам гемов: берём то, что успели
-                      # собрать, а не роняем весь скан
-                      log("  цены гемов: %s — беру то, что успел" % e)
-                      break
-                  for r in d.get("results") or []:
-                      n = r["hash_name"]
-                      if n.startswith("Prismatic: "):
-                          out[n[11:]] = {"ask": r["sell_price"] / 100.0,
-                                       "n": r.get("sell_listings") or 0}
-                  start += 10
-                  page += 1
-                  if start >= (d.get("searchdata", {}).get("total_count") or 0):
-                      break
-              return out
 
 
           def load_cache():
@@ -363,7 +440,7 @@ jobs:
               Отдаёт {гем: {"v", "d", "sale"}} — «sale» значит «цена по сделкам»."""
               out, fails = {}, 0
               # тонкие рынки первыми: именно у них заявка одна и врёт сильнее всего
-              names = sorted(need, key=lambda x: g[x]["n"])[:SALE_MAX]
+              names = sorted(need, key=lambda x: (g[x]["n"] is None, g[x]["n"] or 0))[:SALE_MAX]
               for name in names:
                   if STOP[0] or time.time() > DEADLINE[0]:
                       log("  продажи: Steam не пускает или время вышло — "
@@ -392,8 +469,10 @@ jobs:
                           "зафиксированной (%s)" % (name, c.get("d", "?")))
                   else:
                       out[name] = {"v": g[name]["ask"], "d": "", "sale": False}
-                      log("  %s: продаж нет — цена по предложению (%d лот(ов))"
-                          % (name, g[name]["n"]))
+                      # число заявок неизвестно (взяли его из priceoverview) —
+                      # в журнале это и напишем
+                      log("  %s: продаж нет — цена по предложению%s"
+                          % (name, " (%d лот(ов))" % g[name]["n"] if g[name]["n"] else ""))
               # гемам вне списка (кап или отказ по дороге) — та же лестница без свежих продаж
               for name in need:
                   if name in out:
@@ -414,13 +493,9 @@ jobs:
               DEADLINE[0] = time.time() + SCAN_LIMIT
               log("прогон с адреса %s" % os.environ.get("RUN_IP", "неизвестно"))
               print("scan: gems")
+              # Поиск мог не отдаться — это не беда: заявки гемов тогда добудем
+              # из priceoverview (ask_price), снимок всё равно соберётся
               g = gems()
-              if not g:
-                  # Без цен гемов выгоду не посчитать, а сканировать лоты нечего:
-                  # сайт остаётся на прошлом снимке, прогон остаётся зелёным
-                  log("СБОЙ: цены гемов получить не удалось — "
-                      "оставлен прошлый снимок сайта, прогон не роняем")
-                  return
               cache = load_cache()
               deals, base = [], {}
               for hero, name, default_gem in ARC:
@@ -446,6 +521,10 @@ jobs:
                   except Exception as e:
                       print("  версии %s не нашлись: %s" % (name, e))
                       vlist = []
+                  if not vlist:
+                      # Поиск версий не отдался — проверяем известные префиксы
+                      # напрямую: Exalted, Inscribed, Corrupted...
+                      vlist = probe_variants(name)
                   for vname in vlist:
                       if STOP[0]:
                           log("  Steam не пускает — остальные версии не прошу")
@@ -471,7 +550,21 @@ jobs:
                   # зафиксированная, иначе заявка. Дефолтный гем не считаем —
                   # его лоты в таблицу не попадают
                   need = {l["gem"] for l in lots
-                          if l.get("gem") and l["gem"] != default_gem and l["gem"] in g}
+                          if l.get("gem") and l["gem"] != default_gem}
+                  # Гемам, которых не отдала страница поиска, — заявку из
+                  # priceoverview: иначе лоты с такими самоцветами выпали бы
+                  # из таблицы совсем
+                  for nm in sorted(need):
+                      if nm in g:
+                          continue
+                      a = ask_price(nm)
+                      if a:
+                          # число заявок неизвестно — None, а not выдуманное число:
+                          # в таблице такое не показываем вовсе
+                          g[nm] = {"ask": a, "n": None}
+                          log("  %s: поиск не отдал — заявка %s из priceoverview"
+                              % (nm, rub(a)))
+                  need = {n for n in need if n in g}
                   print("scan: sale")
                   S = enrich(g, cache, need)
                   # версии одной арканы — по сути один предмет: пара цена+гем не дублируется
@@ -521,7 +614,8 @@ jobs:
                   """Чем оперта цена гема: сделками (и какой давности) или заявкой."""
                   if d["sale"]:
                       return " по продажам" + ("" if d["sd"] == ymd() else " (%s)" % d["sd"])
-                  return " по предложению" + (", заявок: %d" % d["n"] if d["n"] <= THIN else "")
+                  return " по предложению" + (", заявок: %d" % d["n"]
+                                              if d["n"] and d["n"] <= THIN else "")
 
               def card(d, tag, cls=""):
                   if not d:
@@ -552,7 +646,14 @@ jobs:
               def table_basis(d):
                   if d["sale"]:
                       return "по продажам" + ("" if d["sd"] == ymd() else " %s" % d["sd"])
-                  return "по предложению" + (", заявок: %d" % d["n"] if d["n"] <= THIN else "")
+                  return "по предложению" + (", заявок: %d" % d["n"]
+                                             if d["n"] and d["n"] <= THIN else "")
+
+              def lots_of(d):
+                  """Сколько лотов у гема. Число заявок неизвестно (поиск не
+                  отдался) — подпись не показываем: выдуманное число хуже её
+                  отсутствия."""
+                  return " &middot; гемов: %d" % d["n"] if d["n"] else ""
 
               rows = []
               for d in deals:
@@ -561,13 +662,13 @@ jobs:
                   rows.append(
                       '<tr data-gem="%s" data-price="%d" data-save="%d" data-pct="%d">'
                       '<td><b>%s</b><div class="mut">$%.2f</div></td>'
-                      '<td><i style="background:%s"></i>%s<div class="mut">%s &middot; гемов: %d</div></td>'
+                      '<td><i style="background:%s"></i>%s<div class="mut">%s%s</div></td>'
                       '<td class="num">%s<div class="mut">%s</div></td>'
                       '<td class="num mut">%s</td>'
                       '<td class="num %s">%s%s<div class="mut">%d%%</div></td></tr>'
                       % (d["gem"].lower(), round(d["price"] * RATE), round(d["save"] * RATE), round(d["pct"]),
                          rub(d["price"]), d["price"], color(d["gem"]), d["gem"],
-                         d["hero"], d["n"], rub(d["gemv"]), table_basis(d), rub(d["setp"]),
+                         d["hero"], lots_of(d), rub(d["gemv"]), table_basis(d), rub(d["setp"]),
                          "pos" if d["save"] >= 0 else "neg",
                          "&minus;" if d["save"] < 0 else "", rub(abs(d["save"])), round(d["pct"])))
               def cheap_line(hero):
